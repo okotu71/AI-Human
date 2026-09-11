@@ -2,7 +2,8 @@ name: OkotuNpcAiEngine
 version: '${project.version}'
 main: com.okotu.npcai.OkotuNpcAiPlugin
 api-version: '1.20'
-author: okotu
+author: okotu71
+website: https://github.com/okotu71/NPC-AI-Engine
 description: AI dialogue engine for Citizens NPCs, backed by Ollama and MySQL persistence.
 
 depend: [Citizens]

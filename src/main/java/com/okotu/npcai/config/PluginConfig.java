@@ -49,6 +49,14 @@ public class PluginConfig {
     public final int ollamaSummaryNumPredict;
     public final long ollamaSummaryTimeoutMs;
     public final double ollamaTemperature;
+    public final int ollamaNumCtx;
+    public final int ollamaSummaryNumCtx;
+    public final int ollamaNumBatch;
+    public final int ollamaNumThread;
+    public final int ollamaNumGpu;
+    public final int ollamaTopK;
+    public final double ollamaTopP;
+    public final double ollamaRepeatPenalty;
 
     // --- conversation / memory compression ---
     public final int recentMessages;
@@ -139,6 +147,14 @@ public class PluginConfig {
         this.ollamaSummaryNumPredict = cfg.getInt("ollama.summary-num-predict", 250);
         this.ollamaSummaryTimeoutMs = cfg.getLong("ollama.summary-timeout-ms", 30000);
         this.ollamaTemperature = cfg.getDouble("ollama.temperature", 0.7);
+        this.ollamaNumCtx = cfg.getInt("ollama.num-ctx", 1024);
+        this.ollamaSummaryNumCtx = cfg.getInt("ollama.summary-num-ctx", 2048);
+        this.ollamaNumBatch = cfg.getInt("ollama.num-batch", 512);
+        this.ollamaNumThread = cfg.getInt("ollama.num-thread", 0);
+        this.ollamaNumGpu = cfg.getInt("ollama.num-gpu", 0);
+        this.ollamaTopK = cfg.getInt("ollama.top-k", 40);
+        this.ollamaTopP = cfg.getDouble("ollama.top-p", 0.9);
+        this.ollamaRepeatPenalty = cfg.getDouble("ollama.repeat-penalty", 1.1);
 
         this.recentMessages = cfg.getInt("conversation.recent-messages", 20);
         this.summaryTriggerMessages = cfg.getInt("conversation.summary-trigger-messages", 30);

@@ -20,6 +20,20 @@ import java.util.logging.Logger;
 /**
  * Client for Ollama's /api/chat endpoint. All calls are async
  * (java.net.http.HttpClient + CompletableFuture): they never block the main thread.
+ *
+ * <p>Performance tuning lives in two places:
+ * <ul>
+ *   <li>Per-call ({@link CallOptions}): {@code num_predict}, request timeout,
+ *       and {@code num_ctx} - these genuinely differ between a short NPC
+ *       reply and a long memory-compression summary, so dialogue and
+ *       SummaryService each pass their own values (see
+ *       {@code ollama.*} vs {@code ollama.summary-*} in config.yml).</li>
+ *   <li>Global (every call, from {@link PluginConfig}): {@code keep_alive},
+ *       {@code temperature}, {@code num_batch}, {@code num_thread},
+ *       {@code num_gpu}, {@code top_k}, {@code top_p}, {@code repeat_penalty} -
+ *       these are llama.cpp/Ollama runtime knobs that don't really need to
+ *       differ between dialogue and summary calls.</li>
+ * </ul>
  */
 public class OllamaClient {
 
@@ -33,7 +47,7 @@ public class OllamaClient {
         this.httpClient = HttpClient.newBuilder()
                 // Just for establishing the TCP connection - the much bigger factor for a
                 // slow/CPU-only model is generation time, which is bounded separately per
-                // call below (chat()'s timeoutMs), not this constant.
+                // call below (CallOptions.timeoutMs), not this constant.
                 .connectTimeout(Duration.ofMillis(config.ollamaTimeoutMs))
                 .executor(executor)
                 .build();
@@ -41,12 +55,12 @@ public class OllamaClient {
 
     /**
      * One chat turn: [system prompt] + [history] + [current user message].
-     * Uses {@code ollama.num-predict} and {@code ollama.timeout-ms} from
-     * config.yml - fine for short in-character NPC replies, but NOT for
-     * longer generations like memory summaries (see the overload below):
-     * a fixed short timeout tuned for a 64-token reply will legitimately
-     * time out a 400-token summary generation, since that just takes longer
-     * to produce, especially on a small/CPU-only model.
+     * Uses the dialogue defaults from config.yml ({@code ollama.num-predict},
+     * {@code ollama.timeout-ms}, {@code ollama.num-ctx}) - fine for short
+     * in-character NPC replies, but NOT for longer generations like memory
+     * summaries (see the overload below): a context/timeout/token budget
+     * tuned for a short reply will legitimately cut off or time out a much
+     * longer summary generation.
      *
      * @param model        Ollama model tag to use (e.g. "qwen2.5:0.5b")
      * @param systemPrompt already-built system prompt (character sheet + memory + knowledge + context)
@@ -56,21 +70,21 @@ public class OllamaClient {
      */
     public CompletableFuture<String> chat(String model, String systemPrompt,
                                            List<ChatMessage> messages, String userMessage) {
-        return chat(model, systemPrompt, messages, userMessage, config.ollamaNumPredict, config.ollamaTimeoutMs);
+        return chat(model, systemPrompt, messages, userMessage,
+                new CallOptions(config.ollamaNumPredict, config.ollamaTimeoutMs, config.ollamaNumCtx));
     }
 
     /**
      * Same as {@link #chat(String, String, List, String)} but with explicit
-     * {@code num_predict}/timeout overrides - e.g. SummaryService needs room
-     * (and time) for a ~200-word summary, well beyond the short-reply
-     * defaults used for normal NPC dialogue. Use
-     * {@code ollama.summary-num-predict} / {@code ollama.summary-timeout-ms}
-     * for that case rather than guessing at a one-size-fits-all timeout.
+     * per-call overrides - e.g. SummaryService needs room (and time, and
+     * context window) for a ~200-word summary, well beyond the short-reply
+     * defaults used for normal NPC dialogue. Use the {@code ollama.summary-*}
+     * config.yml keys for that case rather than guessing at one-size-fits-all values.
      */
     public CompletableFuture<String> chat(String model, String systemPrompt, List<ChatMessage> messages,
-                                           String userMessage, int numPredict, long timeoutMs) {
-        JsonObject body = buildRequestBody(model, systemPrompt, messages, userMessage, numPredict);
-        return attemptWithRetries(body, timeoutMs, config.ollamaMaxRetries);
+                                           String userMessage, CallOptions callOptions) {
+        JsonObject body = buildRequestBody(model, systemPrompt, messages, userMessage, callOptions);
+        return attemptWithRetries(body, callOptions.timeoutMs(), config.ollamaMaxRetries);
     }
 
     private CompletableFuture<String> attemptWithRetries(JsonObject body, long timeoutMs, int retriesLeft) {
@@ -126,16 +140,12 @@ public class OllamaClient {
     }
 
     private JsonObject buildRequestBody(String model, String systemPrompt,
-                                         List<ChatMessage> history, String userMessage, int numPredict) {
+                                         List<ChatMessage> history, String userMessage, CallOptions callOptions) {
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
         body.addProperty("stream", false);
         body.addProperty("keep_alive", config.ollamaKeepAlive);
-
-        JsonObject options = new JsonObject();
-        options.addProperty("num_predict", numPredict);
-        options.addProperty("temperature", config.ollamaTemperature);
-        body.add("options", options);
+        body.add("options", buildOptions(callOptions));
 
         JsonArray messages = new JsonArray();
         messages.add(chatMessageJson("system", systemPrompt));
@@ -146,6 +156,31 @@ public class OllamaClient {
         body.add("messages", messages);
 
         return body;
+    }
+
+    /**
+     * Builds the llama.cpp/Ollama "options" object. num_predict/num_ctx come
+     * from the per-call {@link CallOptions} (dialogue vs summary differ);
+     * everything else is a global performance/sampling knob from config.yml,
+     * the same for every call. num_thread/num_gpu are only included when
+     * &gt; 0 ("0" in config.yml means "let Ollama auto-detect" for those two).
+     */
+    private JsonObject buildOptions(CallOptions callOptions) {
+        JsonObject options = new JsonObject();
+        options.addProperty("num_predict", callOptions.numPredict());
+        options.addProperty("num_ctx", callOptions.numCtx());
+        options.addProperty("temperature", config.ollamaTemperature);
+        options.addProperty("num_batch", config.ollamaNumBatch);
+        if (config.ollamaNumThread > 0) {
+            options.addProperty("num_thread", config.ollamaNumThread);
+        }
+        if (config.ollamaNumGpu > 0) {
+            options.addProperty("num_gpu", config.ollamaNumGpu);
+        }
+        options.addProperty("top_k", config.ollamaTopK);
+        options.addProperty("top_p", config.ollamaTopP);
+        options.addProperty("repeat_penalty", config.ollamaRepeatPenalty);
+        return options;
     }
 
     private JsonObject chatMessageJson(String role, String content) {
@@ -178,5 +213,9 @@ public class OllamaClient {
         public static ChatMessage assistant(String content) {
             return new ChatMessage("assistant", content);
         }
+    }
+
+    /** Per-call overrides: the values that genuinely differ between dialogue and memory-compression calls. */
+    public record CallOptions(int numPredict, long timeoutMs, int numCtx) {
     }
 }

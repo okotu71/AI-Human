@@ -22,9 +22,50 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`okotu-npc-ai-engine-1.09.jar`. `plugin.yml`'s `version:` field is filled in
+`okotu-npc-ai-engine-1.10.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.10
+
+- **Critical bug fix: fresh databases couldn't start at all.**
+  `CREATE TABLE npc_profiles` failed with
+  `BLOB, TEXT, GEOMETRY or JSON column 'personality' can't have a default value`
+  - MySQL doesn't allow a literal `DEFAULT` on `TEXT`/`BLOB`/`JSON` columns
+  (only `VARCHAR` and other fixed-size types support that). `personality`
+  and `background` were declared `TEXT NOT NULL DEFAULT ''`, which is
+  invalid syntax. Since `CREATE TABLE IF NOT EXISTS` is one atomic
+  statement, this failure meant **none** of the six tables got created on a
+  brand-new database (the other five all have a foreign key back to
+  `npc_profiles`, so they never even got attempted). Fixed to
+  `TEXT NOT NULL` (no default) in `schema.sql` and both `sql/okotu_npc_ai*.sql`
+  reference copies - `NpcProfileDao.insert()` already always supplies an
+  explicit value for both columns, so nothing else needed to change. If you
+  hit this on 1.09, there's nothing to migrate: the tables were never
+  created in the first place, so updating the jar and restarting is enough -
+  `CREATE TABLE IF NOT EXISTS` will simply succeed this time.
+- **`/okotunpc info <npcId>` now shows the plugin version and author** right
+  under the NPC's name line (`okotu-npc-ai-engine vX.XX by okotu71`).
+- **`/okotunpc version` now shows the GitHub link**
+  (`https://github.com/okotu71/NPC-AI-Engine`), and the plugin's own
+  `author`/`website` fields in `plugin.yml` are set too (so Bukkit's
+  built-in `/plugins` and `/version` commands show proper attribution as well).
+- **Ollama performance tuning, expanded.** `OllamaClient` now sends the
+  full common set of llama.cpp/Ollama runtime options instead of just
+  `num_predict`/`temperature`: `num_ctx` (context window - kept small for
+  dialogue since the assembled prompt is designed to stay short, larger for
+  summaries via a separate `summary-num-ctx`), `num_batch` (prompt-eval
+  batch size), `num_thread` (pin to your docking's actual CPU allocation
+  instead of relying on auto-detection on a shared host), `num_gpu` (0 by
+  default, matching the CPU-only egg from earlier - raise it if your
+  docking has GPU support), and `top_k`/`top_p`/`repeat_penalty` (sampling
+  knobs that also help avoid the model rambling into repetition and
+  burning through its `num_predict` budget for nothing). All new keys live
+  under `ollama:` in config.yml, documented inline, and default to values
+  that change nothing versus 1.09 until you tune them (except `num_ctx`,
+  which is a genuine new speed lever - lower than most models' own default
+  context size, matched to how short this plugin's prompts are designed to
+  be). `/okotunpc version` shows all of them.
 
 ## What's new in 1.09
 
@@ -431,7 +472,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/okotu-npc-ai-engine-1.09.jar | grep plugin.yml` after
+  `unzip -l target/okotu-npc-ai-engine-1.10.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

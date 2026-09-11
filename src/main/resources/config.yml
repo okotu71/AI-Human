@@ -84,6 +84,51 @@ ollama:
   # varied/creative. 0.7 is a reasonable middle ground for in-character chat.
   temperature: 0.7
 
+  # ---------------------------------------------------------------------
+  # Performance tuning (llama.cpp options, passed through to Ollama as-is).
+  # These are the knobs that most affect how fast a reply comes back,
+  # especially on the CPU-only docking set up via the Pterodactyl egg.
+  # ---------------------------------------------------------------------
+
+  # Context window size in tokens (prompt + history + generated reply all
+  # count against this). The assembled prompt (character sheet + memory +
+  # knowledge + village context) is designed to stay in the 300-500 token
+  # range, so a smaller-than-model-default context speeds up prompt
+  # processing and uses less RAM without losing anything for normal
+  # dialogue. Raise it only if replies look like they're missing context
+  # (e.g. you set knowledge-limit/village-events-limit high, or write very
+  # long backstories/system prompts).
+  num-ctx: 1024
+  # Memory-compression summaries need a bigger window: the transcript being
+  # summarized can be up to summary-trigger-messages raw lines, plus the
+  # previous summary, plus the summary-prompt instructions. Too small here
+  # silently truncates older parts of the conversation before they're even
+  # considered for the summary.
+  summary-num-ctx: 2048
+  # Tokens processed together during prompt evaluation ("prefill"). Higher
+  # can speed up prefill on CPU at the cost of more RAM; Ollama's own
+  # default is 512, which is a good starting point for a CPU-only docking.
+  num-batch: 512
+  # CPU threads Ollama may use for this request. 0 = let Ollama auto-detect
+  # (usually all visible cores). On a shared/limited container (like the
+  # Pterodactyl egg from earlier), explicitly setting this to match the
+  # container's actual CPU allocation often performs more predictably than
+  # auto-detection, which can over-subscribe on a host shared with other
+  # services.
+  num-thread: 0
+  # GPU layers to offload, if the Ollama docking has a GPU available. 0 =
+  # CPU-only (the default egg setup). Only raise this if you know the
+  # docking has GPU support - it's a no-op otherwise.
+  num-gpu: 0
+  # Sampling knobs that (lightly) affect speed too: a smaller top-k/top-p
+  # narrows the choices the model has to weigh per token, and a sane
+  # repeat-penalty helps prevent the model rambling into repetition and
+  # using up its whole num-predict budget for no reason. These match
+  # Ollama's own defaults, so they change nothing until you tune them.
+  top-k: 40
+  top-p: 0.9
+  repeat-penalty: 1.1
+
 conversation:
   # How many of the most recent raw messages to include in the "RECENT
   # MESSAGES" section of the prompt (independent from the compression trigger below).

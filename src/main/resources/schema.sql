@@ -24,8 +24,9 @@ CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_profiles (
     npc_id        INT UNSIGNED NOT NULL,
     name          VARCHAR(64)  NOT NULL,
     role          VARCHAR(64)  NOT NULL DEFAULT '',
-    personality   TEXT         NOT NULL DEFAULT '',
-    background    TEXT         NOT NULL DEFAULT '',
+    personality   TEXT         NOT NULL,    -- MySQL forbids a literal DEFAULT on TEXT/BLOB/JSON columns;
+                                             -- NpcProfileDao.insert() always supplies a value explicitly
+    background    TEXT         NOT NULL,
     village       VARCHAR(64)  NULL,
     profession    VARCHAR(64)  NULL,
     speech_style  VARCHAR(128) NULL,

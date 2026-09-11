@@ -320,7 +320,9 @@ public class OkotuCommand implements CommandExecutor {
         var cfg = plugin.getPluginConfig();
 
         sender.sendMessage(ChatColor.GOLD + "okotu-npc-ai-engine v" + plugin.getDescription().getVersion()
-                + ChatColor.GRAY + "  (profile: " + cfg.activeProfile + ")");
+                + ChatColor.GRAY + "  by okotu71  (profile: " + cfg.activeProfile + ")");
+        sender.sendMessage(ChatColor.GRAY + "GitHub: " + ChatColor.AQUA
+                + "https://github.com/okotu71/NPC-AI-Engine");
         sender.sendMessage(ChatColor.GRAY + "Ollama docking: " + ChatColor.WHITE + cfg.ollamaBaseUrl);
         sender.sendMessage(ChatColor.GRAY + "Model: " + ChatColor.WHITE + cfg.ollamaDefaultModel
                 + ChatColor.GRAY + "  | Summary model: " + ChatColor.WHITE + cfg.ollamaSummaryModel);
@@ -328,6 +330,14 @@ public class OkotuCommand implements CommandExecutor {
                 + " num-predict=" + cfg.ollamaNumPredict
                 + " summary-num-predict=" + cfg.ollamaSummaryNumPredict
                 + " temperature=" + cfg.ollamaTemperature);
+        sender.sendMessage(ChatColor.GRAY + "num-ctx=" + cfg.ollamaNumCtx
+                + " summary-num-ctx=" + cfg.ollamaSummaryNumCtx
+                + " num-batch=" + cfg.ollamaNumBatch
+                + " num-thread=" + (cfg.ollamaNumThread > 0 ? cfg.ollamaNumThread : "auto")
+                + " num-gpu=" + (cfg.ollamaNumGpu > 0 ? cfg.ollamaNumGpu : "cpu-only"));
+        sender.sendMessage(ChatColor.GRAY + "top-k=" + cfg.ollamaTopK
+                + " top-p=" + cfg.ollamaTopP
+                + " repeat-penalty=" + cfg.ollamaRepeatPenalty);
         sender.sendMessage(ChatColor.GRAY + "timeout-ms=" + cfg.ollamaTimeoutMs
                 + " summary-timeout-ms=" + cfg.ollamaSummaryTimeoutMs
                 + " max-retries=" + cfg.ollamaMaxRetries
@@ -382,6 +392,8 @@ public class OkotuCommand implements CommandExecutor {
             NpcProfile p = profile.get();
             sender.sendMessage(ChatColor.GOLD + "NPC " + p.npcId() + " - " + p.name()
                     + (p.enabled() ? ChatColor.GREEN + " [AI enabled]" : ChatColor.RED + " [AI disabled]"));
+            sender.sendMessage(ChatColor.DARK_GRAY + "okotu-npc-ai-engine v" + plugin.getDescription().getVersion()
+                    + " by okotu71");
             sender.sendMessage(ChatColor.GRAY + "Role: " + p.role() + " | Profession: " + p.profession()
                     + " | Village: " + p.village());
             sender.sendMessage(ChatColor.GRAY + "Model (global, set in config.yml): "

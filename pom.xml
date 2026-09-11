@@ -6,7 +6,7 @@
 
     <groupId>com.okotu</groupId>
     <artifactId>okotu-npc-ai-engine</artifactId>
-    <version>1.09</version>
+    <version>1.10</version>
     <packaging>jar</packaging>
 
     <properties>
