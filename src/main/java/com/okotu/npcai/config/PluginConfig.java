@@ -84,6 +84,36 @@ public class PluginConfig {
     public final long proximityGreetCooldownMs;
     public final long chatCaptureTimeoutMs;
 
+    // --- interaction.autonomous (1.11+) ---
+    public final boolean autonomousEnabled;
+    public final long autonomousCheckIntervalTicks;
+    public final int autonomousDefaultWanderRadius;
+    public final int autonomousDefaultWanderMinDistance;
+    public final int autonomousDefaultWanderMaxDistance;
+    public final double autonomousDefaultDetectionRadius;
+    public final double autonomousApproachStopDistance;
+    public final double autonomousWalkSpeed;
+    public final boolean autonomousAvoidLava;
+    public final boolean autonomousAvoidDeepWater;
+    public final boolean autonomousAvoidCliffs;
+    public final boolean autonomousAvoidFire;
+    public final int autonomousMaxSafeFallBlocks;
+    public final int autonomousMaxWaterDepth;
+    public final int autonomousDestinationAttempts;
+
+    // --- dialog.world-bubble (1.11+) ---
+    public final boolean worldBubbleEnabled;
+    public final long worldBubbleDurationTicks;
+    public final double worldBubbleViewRange;
+    public final double worldBubbleHeightOffset;
+
+    // --- integrations (1.11+) ---
+    public final boolean pl3xMapEnabled;
+    public final boolean npcMapEnabled;
+    public final boolean npcMapDebug;
+    public final long npcMapRefreshIntervalTicks;
+    public final double npcMapMarkerSize;
+
     // --- rate limit ---
     public final long perPlayerCooldownMs;
 
@@ -179,6 +209,36 @@ public class PluginConfig {
         this.proximityCheckIntervalTicks = cfg.getLong("interaction.proximity.check-interval-ticks", 20);
         this.proximityGreetCooldownMs = cfg.getLong("interaction.proximity.greet-cooldown-minutes", 5) * 60_000L;
         this.chatCaptureTimeoutMs = cfg.getLong("interaction.chat-capture-timeout-seconds", 30) * 1000L;
+
+        this.autonomousEnabled = cfg.getBoolean("interaction.autonomous.enabled", true);
+        this.autonomousCheckIntervalTicks = cfg.getLong("interaction.autonomous.check-interval-ticks", 40);
+        this.autonomousDefaultWanderRadius = cfg.getInt("interaction.autonomous.default-wander-radius", 500);
+        this.autonomousDefaultWanderMinDistance =
+                cfg.getInt("interaction.autonomous.default-wander-min-distance", 30);
+        this.autonomousDefaultWanderMaxDistance =
+                cfg.getInt("interaction.autonomous.default-wander-max-distance", 150);
+        this.autonomousDefaultDetectionRadius =
+                cfg.getDouble("interaction.autonomous.default-detection-radius", 15);
+        this.autonomousApproachStopDistance = cfg.getDouble("interaction.autonomous.approach-stop-distance", 2.5);
+        this.autonomousWalkSpeed = cfg.getDouble("interaction.autonomous.walk-speed", 1.0);
+        this.autonomousAvoidLava = cfg.getBoolean("interaction.autonomous.safety.avoid-lava", true);
+        this.autonomousAvoidDeepWater = cfg.getBoolean("interaction.autonomous.safety.avoid-deep-water", true);
+        this.autonomousAvoidCliffs = cfg.getBoolean("interaction.autonomous.safety.avoid-cliffs", true);
+        this.autonomousAvoidFire = cfg.getBoolean("interaction.autonomous.safety.avoid-fire", true);
+        this.autonomousMaxSafeFallBlocks = cfg.getInt("interaction.autonomous.safety.max-safe-fall-blocks", 3);
+        this.autonomousMaxWaterDepth = cfg.getInt("interaction.autonomous.safety.max-water-depth", 2);
+        this.autonomousDestinationAttempts = cfg.getInt("interaction.autonomous.safety.destination-attempts", 8);
+
+        this.worldBubbleEnabled = cfg.getBoolean("dialog.world-bubble.enabled", true);
+        this.worldBubbleDurationTicks = cfg.getLong("dialog.world-bubble.duration-seconds", 6) * 20L;
+        this.worldBubbleViewRange = cfg.getDouble("dialog.world-bubble.view-range", 24);
+        this.worldBubbleHeightOffset = cfg.getDouble("dialog.world-bubble.height-offset", 0.4);
+
+        this.pl3xMapEnabled = cfg.getBoolean("integrations.pl3xmap.enabled", false);
+        this.npcMapEnabled = cfg.getBoolean("npc-map.enabled", true);
+        this.npcMapDebug = cfg.getBoolean("npc-map.debug", false);
+        this.npcMapRefreshIntervalTicks = cfg.getLong("npc-map.refresh-interval-seconds", 10) * 20L;
+        this.npcMapMarkerSize = cfg.getDouble("npc-map.marker-size", 1.0);
 
         this.perPlayerCooldownMs = cfg.getLong("rate-limit.per-player-cooldown-ms", 3000);
 

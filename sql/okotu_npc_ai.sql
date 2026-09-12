@@ -93,6 +93,29 @@ CREATE TABLE IF NOT EXISTS npc_state (
         REFERENCES npc_profiles (npc_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS npc_behavior_config (
+    npc_id               INT UNSIGNED NOT NULL,
+    autonomous           TINYINT(1)   NOT NULL DEFAULT 0,
+    behavior_type        ENUM('WANDER','VILLAGE','TRAVEL','GUARD','FOLLOW') NOT NULL DEFAULT 'WANDER',
+    home_world           VARCHAR(64)  NULL,
+    home_x               DOUBLE       NULL,
+    home_y               DOUBLE       NULL,
+    home_z               DOUBLE       NULL,
+    wander_radius        INT UNSIGNED NULL,
+    wander_min_distance  INT UNSIGNED NULL,
+    wander_max_distance  INT UNSIGNED NULL,
+    detection_radius     DOUBLE       NULL,
+    avoid_lava           TINYINT(1)   NULL,
+    avoid_deep_water     TINYINT(1)   NULL,
+    avoid_cliffs         TINYINT(1)   NULL,
+    avoid_fire           TINYINT(1)   NULL,
+    created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (npc_id),
+    CONSTRAINT fk_behavior_npc FOREIGN KEY (npc_id)
+        REFERENCES npc_profiles (npc_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Example dedicated user (adjust host/password, then match config.yml "prod" block):
 -- CREATE USER 'usr'@'%' IDENTIFIED BY 'psw';
 -- GRANT ALL PRIVILEGES ON okotu_npc_ai.* TO 'usr'@'%';

@@ -233,10 +233,126 @@ interaction:
     # Minimum time before the same NPC will auto-greet the same player
     # again, so standing near an NPC doesn't repeatedly re-trigger it.
     greet-cooldown-minutes: 5
+  # Autonomous movement (1.11+): NPCs that wander the world on their own and
+  # approach players themselves instead of standing still waiting to be
+  # noticed. Off per-NPC by default even when this whole subsystem is
+  # enabled - see /okotunpc autonomous <npcId> on. Citizens handles the
+  # actual walking/pathfinding (its Navigator); this plugin only decides
+  # WHERE to send an NPC and WHEN to approach/talk, never individual steps.
+  autonomous:
+    # Master switch for the whole subsystem. If false, autonomous is
+    # unavailable regardless of any per-NPC setting (NpcBehaviorManager's
+    # task doesn't even run).
+    enabled: true
+    # How often (in ticks; 20 = 1 second) the behavior state machine
+    # re-evaluates every autonomous NPC (pick a new destination, check for
+    # nearby players, advance WANDERING/APPROACHING/TALKING state). This is
+    # NOT how often the NPC's position updates - that's Citizens' own
+    # Navigator ticking every server tick as usual; this is just how often
+    # this plugin re-decides things like a new destination or a state
+    # transition. Lower = more responsive, more CPU work per NPC.
+    check-interval-ticks: 40
+    # Per-NPC overrides exist for all of these via /okotunpc wander /
+    # /okotunpc autonomous - these are just the defaults for a newly
+    # autonomous-enabled NPC.
+    default-wander-radius: 500
+    default-wander-min-distance: 30
+    default-wander-max-distance: 150
+    default-detection-radius: 15
+    # How close (blocks) the NPC stops from a player it's approaching -
+    # close enough to feel like a conversation, not so close it's awkward.
+    approach-stop-distance: 2.5
+    # Citizens Navigator speed modifier while wandering/approaching (1.0 =
+    # the NPC's normal walking speed).
+    walk-speed: 1.0
+    safety:
+      # A candidate destination is rejected (and a new one picked instead)
+      # if it fails any of these checks. Validated against the world
+      # (blocks, not Citizens' own pathfinding) before ever calling
+      # Navigator.setTarget, since Citizens' own obstacle avoidance is
+      # about not getting stuck, not about "should an NPC willingly walk
+      # into lava" - two different concerns.
+      avoid-lava: true
+      avoid-deep-water: true
+      avoid-cliffs: true
+      avoid-fire: true
+      # A drop of more than this many blocks below a candidate destination
+      # counts as a cliff.
+      max-safe-fall-blocks: 3
+      # Water deeper than this many blocks (from the surface down to solid
+      # ground) counts as "deep water" to avoid.
+      max-water-depth: 2
+      # How many candidate destinations to try (each re-validated) before
+      # giving up for this wander cycle and just trying again next time.
+      destination-attempts: 8
   # How long a conversation stays "open" (accepting the player's next chat
   # message as a reply to the NPC, whether opened by right-click or by
   # proximity) before it expires from inactivity.
   chat-capture-timeout-seconds: 30
+
+dialog:
+  # World-bubble (1.11+): shows the NPC's line as floating text above its
+  # head using Paper's native TextDisplay entity - no hologram plugin
+  # required. This is IN ADDITION to the chat message the player already
+  # gets, not a replacement for it.
+  world-bubble:
+    enabled: true
+    # How long the bubble stays visible before disappearing.
+    duration-seconds: 6
+    # How far away (blocks) other players can see the bubble.
+    view-range: 24
+    # Height above the NPC's own head the text is anchored at.
+    height-offset: 0.4
+
+integrations:
+  # Pl3xMap (1.12+): shows AI-enabled NPCs as live markers on your Pl3xMap
+  # web map. Talks to Pl3xMap purely via reflection (see
+  # com.okotu.npcai.map.Pl3xMapIntegration, adapted from the same bridge
+  # used by mc-safeguard's Fabulous Claims/zones map overlay) - no Maven
+  # dependency on Pl3xMap, and it simply does nothing (logged clearly) if
+  # Pl3xMap isn't installed or its version doesn't match the reflected
+  # method names. This is the master on/off switch; see npc-map: below for
+  # how the markers themselves look.
+  pl3xmap:
+    enabled: false
+
+# How AI-enabled NPCs are drawn on the Pl3xMap web map, if
+# integrations.pl3xmap.enabled is true. Each NPC is drawn as a small square
+# (there's no confirmed-safe icon/point marker API to build against yet -
+# see the README "What's new in 1.12" - so a small colored rectangle
+# centered on the NPC is the honest, working option for now).
+npc-map:
+  enabled: true
+  # Verbose [OkotuNpcAiEngine] log lines about exactly which Pl3xMap
+  # classes/methods were found via reflection, and why a marker update was
+  # skipped, if any. Turn back off once confirmed working - it's chatty.
+  debug: false
+  # How often (seconds) to re-draw every AI-enabled NPC's marker position.
+  # NOT every tick: autonomous NPCs move continuously while wandering, so
+  # this is a deliberately low-frequency poll rather than a per-step update.
+  refresh-interval-seconds: 10
+  # Width/depth (blocks) of the square drawn on the map, centered on the NPC.
+  marker-size: 1.0
+  stationary:
+    border:
+      enabled: true
+      width: 2
+      color: "#3388FF"
+    fill:
+      enabled: true
+      opacity: 0.5
+      color: "#3388FF"
+  autonomous:
+    border:
+      enabled: true
+      width: 2
+      color: "#33CC33"
+    fill:
+      enabled: true
+      opacity: 0.5
+      color: "#33CC33"
+  tooltip:
+    enabled: true
 
 rate-limit:
   # Minimum time between two AI requests from the same player, in milliseconds.

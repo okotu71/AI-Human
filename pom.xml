@@ -6,7 +6,7 @@
 
     <groupId>com.okotu</groupId>
     <artifactId>okotu-npc-ai-engine</artifactId>
-    <version>1.10</version>
+    <version>1.12</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -104,6 +104,17 @@
             <version>${gson.version}</version>
             <scope>compile</scope>
         </dependency>
+        <!-- NOTE: Pl3xMap is intentionally NOT a Maven dependency here (1.12).
+             Its published API coordinates/version aren't something this
+             environment could verify against a real repository, and getting
+             them wrong breaks the build for everyone. Pl3xMapIntegration
+             (com.okotu.npcai.map) therefore talks to Pl3xMap purely via
+             java.lang.reflect, resolved once and cached - the same approach
+             used in mc-safeguard's Pl3xMap bridge, which this one is adapted
+             from. This means: no extra dependency, no extra repository, the
+             project always compiles, and the integration simply no-ops if
+             Pl3xMap isn't installed or its installed version doesn't match
+             the reflected method names (logged clearly either way). -->
     </dependencies>
 
     <build>

@@ -7,12 +7,17 @@ import com.okotu.npcai.db.NpcStateDao;
 import com.okotu.npcai.db.PlayerMemoryDao;
 import com.okotu.npcai.db.VillageEventDao;
 import com.okotu.npcai.model.KnowledgeEntry;
+import com.okotu.npcai.model.NpcBehaviorConfig;
+import com.okotu.npcai.model.NpcBehaviorType;
 import com.okotu.npcai.model.NpcProfile;
 import com.okotu.npcai.model.NpcState;
 import com.okotu.npcai.model.PlayerMemory;
 import com.okotu.npcai.model.VillageEvent;
+import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.npc.NPC;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -58,6 +63,9 @@ public class OkotuCommand implements CommandExecutor {
             case "state" -> handleState(sender, args);
             case "enable" -> handleEnable(sender, args);
             case "disable" -> handleDisable(sender, args);
+            case "autonomous" -> handleAutonomous(sender, args);
+            case "wander" -> handleWander(sender, args);
+            case "behavior" -> handleBehaviorType(sender, args);
             case "version" -> handleVersion(sender);
             case "info" -> handleInfo(sender, args);
             default -> sendUsage(sender);
@@ -76,6 +84,9 @@ public class OkotuCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.YELLOW + "/okotunpc state <npcId> <happiness|fear|anger|fatigue|hunger> <0-100>");
         sender.sendMessage(ChatColor.YELLOW + "/okotunpc enable <npcId>  (lets this NPC use AI chat - console-friendly)");
         sender.sendMessage(ChatColor.YELLOW + "/okotunpc disable <npcId>  (stops this NPC from using AI chat)");
+        sender.sendMessage(ChatColor.YELLOW + "/okotunpc autonomous <npcId> on|off  (1.11+: autonomous wandering)");
+        sender.sendMessage(ChatColor.YELLOW + "/okotunpc wander <npcId> <radius> <minDistance> <maxDistance>");
+        sender.sendMessage(ChatColor.YELLOW + "/okotunpc behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>");
         sender.sendMessage(ChatColor.YELLOW + "/okotunpc version  (shows the running version and AI parameters, never SQL/MySQL settings)");
         sender.sendMessage(ChatColor.YELLOW + "/okotunpc info <npcId> [player]");
     }
@@ -308,6 +319,122 @@ public class OkotuCommand implements CommandExecutor {
     }
 
     // ---------------------------------------------------------------
+    // autonomous / wander / behavior (1.11+) - autonomous movement.
+    // Requires the NPC to already be AI-enabled (/okotunpc enable) - this
+    // is a layer on top of that, not a replacement for it.
+    // ---------------------------------------------------------------
+    private void handleAutonomous(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /okotunpc autonomous <npcId> on|off");
+            return;
+        }
+        Integer npcId = parseInt(sender, args[1]);
+        if (npcId == null) return;
+        String action = args[2].toLowerCase();
+
+        if ("off".equals(action)) {
+            runAsync(sender, "Error disabling autonomous movement", () -> {
+                plugin.getAutonomousNpcRegistry().disable(npcId);
+                sender.sendMessage(ChatColor.YELLOW + "NPC " + npcId + " is no longer autonomous "
+                        + "(will stay where it is, still AI-enabled for conversation).");
+            });
+            return;
+        }
+        if (!"on".equals(action)) {
+            sender.sendMessage(ChatColor.RED + "Usage: /okotunpc autonomous <npcId> on|off");
+            return;
+        }
+
+        if (!plugin.getEnabledNpcRegistry().isEnabled(npcId)) {
+            sender.sendMessage(ChatColor.RED + "NPC " + npcId + " isn't AI-enabled yet - run "
+                    + "/okotunpc enable " + npcId + " first.");
+            return;
+        }
+
+        // Must resolve the NPC's current location on the calling thread (main thread
+        // for both in-game and console commands) before handing off to the async DB
+        // write below - Citizens entity access isn't something to do off-thread.
+        NPC npc = CitizensAPI.getNPCRegistry().getById(npcId);
+        if (npc == null || !npc.isSpawned()) {
+            sender.sendMessage(ChatColor.RED + "NPC " + npcId + " doesn't exist or isn't spawned right now "
+                    + "(it needs to be spawned once so its current position can be captured as its home point).");
+            return;
+        }
+        Location home = npc.getEntity().getLocation();
+
+        runAsync(sender, "Error enabling autonomous movement", () -> {
+            plugin.getAutonomousNpcRegistry().enable(npcId, home);
+            sender.sendMessage(ChatColor.GREEN + "NPC " + npcId + " is now autonomous - home set to "
+                    + formatLocation(home) + ". Use /okotunpc wander to tune its roam radius.");
+        });
+    }
+
+    private void handleWander(CommandSender sender, String[] args) {
+        if (args.length < 5) {
+            sender.sendMessage(ChatColor.RED
+                    + "Usage: /okotunpc wander <npcId> <radius> <minDistance> <maxDistance>");
+            return;
+        }
+        Integer npcId = parseInt(sender, args[1]);
+        if (npcId == null) return;
+        Integer radius = parseInt(sender, args[2]);
+        Integer minDistance = parseInt(sender, args[3]);
+        Integer maxDistance = parseInt(sender, args[4]);
+        if (radius == null || minDistance == null || maxDistance == null) return;
+        if (minDistance > maxDistance) {
+            sender.sendMessage(ChatColor.RED + "minDistance can't be greater than maxDistance.");
+            return;
+        }
+        if (!plugin.getAutonomousNpcRegistry().isAutonomous(npcId)) {
+            sender.sendMessage(ChatColor.RED + "NPC " + npcId + " isn't autonomous yet - run "
+                    + "/okotunpc autonomous " + npcId + " on first.");
+            return;
+        }
+
+        runAsync(sender, "Error updating wander settings", () -> {
+            plugin.getAutonomousNpcRegistry().updateWander(npcId, radius, minDistance, maxDistance);
+            sender.sendMessage(ChatColor.GREEN + "NPC " + npcId + " wander settings updated: radius=" + radius
+                    + " minDistance=" + minDistance + " maxDistance=" + maxDistance);
+        });
+    }
+
+    private void handleBehaviorType(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED
+                    + "Usage: /okotunpc behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>");
+            return;
+        }
+        Integer npcId = parseInt(sender, args[1]);
+        if (npcId == null) return;
+        NpcBehaviorType type;
+        try {
+            type = NpcBehaviorType.valueOf(args[2].toUpperCase());
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(ChatColor.RED + "Unknown behavior type. Valid: WANDER, VILLAGE, TRAVEL, GUARD, FOLLOW.");
+            return;
+        }
+        if (!plugin.getAutonomousNpcRegistry().isAutonomous(npcId)) {
+            sender.sendMessage(ChatColor.RED + "NPC " + npcId + " isn't autonomous yet - run "
+                    + "/okotunpc autonomous " + npcId + " on first.");
+            return;
+        }
+        if (type != NpcBehaviorType.WANDER) {
+            sender.sendMessage(ChatColor.YELLOW + "Note: only WANDER is actually implemented in this version - "
+                    + type + " will be saved but behave like WANDER for now.");
+        }
+
+        runAsync(sender, "Error updating behavior type", () -> {
+            plugin.getAutonomousNpcRegistry().updateBehaviorType(npcId, type);
+            sender.sendMessage(ChatColor.GREEN + "NPC " + npcId + " behavior type set to " + type + ".");
+        });
+    }
+
+    private String formatLocation(Location loc) {
+        return String.format("%s (%.0f, %.0f, %.0f)",
+                loc.getWorld() != null ? loc.getWorld().getName() : "?", loc.getX(), loc.getY(), loc.getZ());
+    }
+
+    // ---------------------------------------------------------------
     // version - running version + AI-related parameters only.
     // Deliberately never prints anything from the mysql-* config (host,
     // port, database, username, password, table-prefix): this command is
@@ -354,8 +481,18 @@ public class OkotuCommand implements CommandExecutor {
                 + " (radius=" + cfg.proximityRadius + " interval=" + cfg.proximityCheckIntervalTicks + "t"
                 + " cooldown=" + (cfg.proximityGreetCooldownMs / 60_000) + "m)"
                 + " chat-capture-timeout=" + (cfg.chatCaptureTimeoutMs / 1000) + "s");
+        sender.sendMessage(ChatColor.GRAY + "autonomous: enabled=" + cfg.autonomousEnabled
+                + " interval=" + cfg.autonomousCheckIntervalTicks + "t"
+                + " default-radius=" + cfg.autonomousDefaultWanderRadius
+                + " (" + cfg.autonomousDefaultWanderMinDistance + "-" + cfg.autonomousDefaultWanderMaxDistance + ")"
+                + " detection=" + cfg.autonomousDefaultDetectionRadius);
+        sender.sendMessage(ChatColor.GRAY + "world-bubble=" + cfg.worldBubbleEnabled
+                + " pl3xmap=" + cfg.pl3xMapEnabled
+                + (cfg.pl3xMapEnabled ? " (present=" + plugin.getPl3xMapIntegration().isPresent() + ")" : ""));
         sender.sendMessage(ChatColor.GRAY + "AI-enabled NPCs: " + ChatColor.WHITE
-                + plugin.getEnabledNpcRegistry().enabledCount());
+                + plugin.getEnabledNpcRegistry().enabledCount()
+                + ChatColor.GRAY + "  | Autonomous NPCs: " + ChatColor.WHITE
+                + plugin.getAutonomousNpcRegistry().autonomousCount());
     }
 
     // ---------------------------------------------------------------
@@ -394,6 +531,16 @@ public class OkotuCommand implements CommandExecutor {
                     + (p.enabled() ? ChatColor.GREEN + " [AI enabled]" : ChatColor.RED + " [AI disabled]"));
             sender.sendMessage(ChatColor.DARK_GRAY + "okotu-npc-ai-engine v" + plugin.getDescription().getVersion()
                     + " by okotu71");
+            Optional<NpcBehaviorConfig> behavior = plugin.getAutonomousNpcRegistry().get(p.npcId());
+            if (behavior.isPresent()) {
+                NpcBehaviorConfig b = behavior.get();
+                sender.sendMessage(ChatColor.AQUA + "Autonomous: " + b.behaviorType()
+                        + (b.hasHome() ? " | home: " + formatLocation(
+                                new Location(Bukkit.getWorld(b.homeWorld()), b.homeX(), b.homeY(), b.homeZ()))
+                                : ""));
+            } else {
+                sender.sendMessage(ChatColor.DARK_GRAY + "Autonomous: off (stationary)");
+            }
             sender.sendMessage(ChatColor.GRAY + "Role: " + p.role() + " | Profession: " + p.profession()
                     + " | Village: " + p.village());
             sender.sendMessage(ChatColor.GRAY + "Model (global, set in config.yml): "

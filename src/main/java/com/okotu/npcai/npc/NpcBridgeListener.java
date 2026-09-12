@@ -3,6 +3,7 @@ package com.okotu.npcai.npc;
 import com.okotu.npcai.OkotuNpcAiPlugin;
 import com.okotu.npcai.util.RateLimiter;
 import io.papermc.paper.event.player.AsyncChatEvent;
+import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.event.NPCRightClickEvent;
 import net.citizensnpcs.api.npc.NPC;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -127,6 +128,11 @@ public class NpcBridgeListener implements Listener {
                     }
                     player.sendMessage(ChatColor.GOLD + "[" + npcName + ChatColor.GOLD + "] "
                             + ChatColor.WHITE + reply);
+
+                    NPC npc = CitizensAPI.getNPCRegistry().getById(npcId);
+                    if (npc != null && npc.isSpawned()) {
+                        plugin.getNpcDialogRenderer().show(npc, reply);
+                    }
                 }));
         return true;
     }

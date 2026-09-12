@@ -124,6 +124,38 @@ CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_state (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------
+-- 7) npc_behavior_config - autonomous movement, one row per NPC (1.11+)
+-- ---------------------------------------------------------
+-- Separate from npc_profiles (the character sheet) on purpose: this is
+-- "how the NPC behaves in the world", not "who the NPC is". NULL on any
+-- of the nullable columns means "use the interaction.autonomous.* default
+-- from config.yml" rather than a per-NPC override.
+CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_behavior_config (
+    npc_id               INT UNSIGNED NOT NULL,
+    autonomous           TINYINT(1)   NOT NULL DEFAULT 0,  -- master per-NPC switch, see /okotunpc autonomous
+    behavior_type        ENUM('WANDER','VILLAGE','TRAVEL','GUARD','FOLLOW') NOT NULL DEFAULT 'WANDER',
+    -- Only WANDER is actually implemented as of 1.11 - the others are accepted
+    -- and stored for forward compatibility but currently behave like WANDER.
+    home_world           VARCHAR(64)  NULL,      -- captured automatically when autonomous is turned on
+    home_x               DOUBLE       NULL,
+    home_y               DOUBLE       NULL,
+    home_z               DOUBLE       NULL,
+    wander_radius        INT UNSIGNED NULL,      -- max distance from home the NPC will roam
+    wander_min_distance  INT UNSIGNED NULL,      -- min distance per hop
+    wander_max_distance  INT UNSIGNED NULL,      -- max distance per hop
+    detection_radius     DOUBLE       NULL,      -- overrides interaction.proximity.radius for this NPC's own perception
+    avoid_lava           TINYINT(1)   NULL,
+    avoid_deep_water     TINYINT(1)   NULL,
+    avoid_cliffs         TINYINT(1)   NULL,
+    avoid_fire           TINYINT(1)   NULL,
+    created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (npc_id),
+    CONSTRAINT {{PREFIX}}fk_behavior_npc FOREIGN KEY (npc_id)
+        REFERENCES {{PREFIX}}npc_profiles (npc_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------
 -- Reference queries (documentation only, not executed automatically)
 -- ---------------------------------------------------------
 -- Safety cap on npc_dialog_history in case SummaryService ever fails to

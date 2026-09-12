@@ -22,9 +22,170 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`okotu-npc-ai-engine-1.10.jar`. `plugin.yml`'s `version:` field is filled in
+`okotu-npc-ai-engine-1.12.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.12
+
+Phase 4 from 1.11, now real: AI-enabled NPCs show up as live markers on a
+Pl3xMap web map. Built by adapting the same Pl3xMap bridge already proven
+working in a sister project (mc-safeguard's Fabulous Claims/zones map
+overlay) rather than guessing at the API from scratch - see that project's
+2.0.11-2.0.16 patch notes for the full history of what was tried and why.
+
+- **`com.okotu.npcai.map.Pl3xMapIntegration`** replaces 1.11's
+  `NoOpPl3xMapIntegration` stub - same class, same approach as mc-safeguard:
+  talks to Pl3xMap **purely via `java.lang.reflect`**, resolved once and
+  cached. **Still no Maven dependency on Pl3xMap** (see the comment in
+  `pom.xml`) - its published API coordinates/version aren't something this
+  environment can verify against a real repository, and getting them wrong
+  breaks the build for everyone. If Pl3xMap isn't installed, or its
+  installed version doesn't match the reflected method names, the
+  integration just logs why (once) and no-ops - it never breaks anything
+  else in the plugin.
+- Every shape is drawn with the confirmed-live
+  `Marker.rectangle(String, double, double, double, double)` - **not** a
+  custom icon/point marker. There's no confirmed-safe icon API to build
+  against yet (same reasoning as mc-safeguard: guessing at
+  `Marker.icon(...)`/`Point.of(...)` risks the exact "argument type
+  mismatch" crash documented in that project's 2.0.11-2.0.13 patch notes).
+  So each AI-enabled NPC is drawn as a small colored square
+  (`npc-map.marker-size`, default 1 block) centered on its position -
+  honest and working beats a nicer-looking guess that silently breaks.
+- **`NpcMapSync`** (new, main-thread, scheduled every
+  `npc-map.refresh-interval-seconds`) draws/updates a marker for every
+  spawned, AI-enabled NPC, colored differently for stationary vs autonomous
+  ones (`npc-map.stationary` / `npc-map.autonomous` - border+fill+color,
+  same shape as mc-safeguard's per-layer style config), with a tooltip
+  showing the NPC's name. Markers for NPCs that stop qualifying (disabled,
+  despawned, removed) are cleaned up the next cycle - a simplified version
+  of mc-safeguard's ADD/UPDATE/DELETE claim-diffing, without needing the
+  content-hash step (an NPC's position differs almost every cycle anyway,
+  so there's little to gain from stricter change detection here).
+- `integrations.pl3xmap.enabled` (already in config.yml since 1.11) is
+  still the master on/off switch; the new `npc-map:` section controls how
+  the markers look and how often they refresh - both default to sensible
+  values, so turning `pl3xmap.enabled: true` on a server with Pl3xMap
+  installed should just work with zero further tuning.
+- `/okotunpc version` now reports `pl3xmap=true (present=true/false)` -
+  `present` reflects `Pl3xMapIntegration#isPresent()`, i.e. whether Pl3xMap
+  is actually installed, enabled, and successfully resolved via reflection
+  right now - not just whether the config flag is on.
+
+### Known limitation carried over from mc-safeguard's own notes
+
+Toggling `npc-map.debug` (or any `npc-map.*` value) via `/okotunpc reload`
+updates the *style* immediately (`NpcMapStyle` re-reads config.yml live),
+but the `Pl3xMapIntegration`/`NpcMapSync` instances themselves are built
+once at startup and not recreated on reload - same deliberate tradeoff
+already made for `ConversationSessionManager`'s timeout in 1.06, to avoid
+tearing down live state on every `/okotunpc reload`. A full restart picks
+up a changed `debug` flag or a Pl3xMap install that appeared after startup.
+
+## What's new in 1.11
+
+The big one: NPCs can now move around the world on their own and approach
+players themselves, instead of standing still waiting for a click or for a
+player to walk into a fixed detection radius. Built as three additive
+subsystems on top of the existing 1.10 codebase, not a rewrite - stationary
+AI NPCs (`autonomous` left off) behave exactly like 1.10, unaffected.
+
+### 1) Autonomous wandering + destination safety
+
+- New `npc_behavior_config` table (one row per NPC, only meaningful once
+  `autonomous` is true): behavior type, home point, wander radius/min/max
+  distance, detection radius, and per-NPC safety overrides.
+- `/okotunpc autonomous <npcId> on|off` - turns wandering on (capturing the
+  NPC's current position as its home/anchor point) or off (keeps all its
+  settings, just stops moving). Requires the NPC to already be AI-enabled
+  (`/okotunpc enable`) - autonomy is a layer on top of that, not a
+  replacement.
+- `/okotunpc wander <npcId> <radius> <minDistance> <maxDistance>` and
+  `/okotunpc behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>` tune a
+  specific NPC. **Only `WANDER` is actually implemented** - the other four
+  are accepted and stored (so the schema/commands don't need to change
+  again later) but currently behave like WANDER. The command warns you
+  about this when you set one.
+- The model never decides individual steps. `NpcMovementController` picks
+  one destination per wander cycle (a random point within
+  `[wander-min-distance, wander-max-distance]` of home, never further than
+  `wander-radius`), `NpcWorldSafety` validates it against the live world
+  (rejects lava, deep water, fire, cactus, and drops taller than
+  `max-safe-fall-blocks`) before it's ever handed to Citizens'
+  `Navigator.setTarget(...)` - which then does the actual
+  pathfinding/walking/obstacle-avoidance, same as it always has. If nothing
+  safe is found in `destination-attempts` tries, the NPC just stays put and
+  tries again next cycle, instead of walking somewhere unsafe.
+- All of this is configurable under `interaction.autonomous` in
+  config.yml, with per-NPC overrides via the commands above.
+
+### 2) Approach/talk state machine
+
+- New `NpcActivityState`: `WANDERING` → `APPROACHING` → `TALKING` → back to
+  `WANDERING`, driven by a new `NpcBehaviorManager` scheduled task
+  (separate from `ProximityGreetingTask`, which keeps handling stationary
+  NPCs exactly as before).
+- While `WANDERING`, the NPC also watches for a player entering its
+  `detection-radius` (shared `NpcPerception` logic, same idea as
+  `ProximityGreetingTask`'s proximity check) - if one shows up, it stops
+  wandering and walks toward them (`APPROACHING`), stopping
+  `approach-stop-distance` blocks away and facing them once close enough
+  (or once Navigator gives up), then opens a conversation exactly the way
+  `ProximityGreetingTask` already does (same `ConversationSessionManager` +
+  `ConversationService#greetApproachingPlayer`, including the 1.09 fix that
+  restarts the reply-capture window once the greeting actually arrives).
+  Once the conversation session closes, the NPC goes back to `WANDERING`.
+- Reuses all of the existing memory/relationship/summary machinery - an
+  autonomous NPC approaching you for the first time in a while can still
+  say "welcome back" the same way a stationary one always could.
+
+### 3) Dialogue visible in the world
+
+- New `NpcDialogRenderer`: shows the NPC's line as floating text above its
+  head using Paper's **native `TextDisplay` entity** (available since
+  1.19.4) - no hologram plugin dependency needed. Controlled by
+  `dialog.world-bubble` in config.yml (on by default, `duration-seconds`,
+  `view-range`, `height-offset`).
+- This is *in addition to* the chat message the player already gets, not a
+  replacement - wired into all three trigger paths (right-click, stationary
+  proximity greeting, and the new autonomous approach/talk flow), so it's
+  consistent everywhere an NPC speaks.
+
+### 4) Pl3xMap integration - scaffolded, NOT functional yet
+
+Deliberately **not implemented** this round: Pl3xMap's marker API differs
+enough across versions that guessing at it risked shipping an integration
+that silently doesn't work on your setup. What's here instead:
+`integrations/Pl3xMapIntegration` (interface) + `NoOpPl3xMapIntegration`
+(does nothing, logs one clear warning at startup if you turn it on) so the
+extension point exists and compiles cleanly without requiring Pl3xMap to be
+installed at all. `integrations.pl3xmap.enabled` defaults to `false`. Tell
+me your exact Pl3xMap version/API and this becomes a real, working
+implementation instead of a stub.
+
+### Things worth testing carefully before relying on this in production
+
+- **Citizens Navigator API calls** (`getNavigator().setTarget/isNavigating/
+  cancelNavigation`, `getLocalParameters().speedModifier`,
+  `npc.faceLocation`) are long-stable parts of the Citizens API, but
+  `pom.xml`'s `citizens.version` is still the placeholder
+  `2.0.35-SNAPSHOT` from the very first version of this project - confirm
+  the real version you're running before relying on autonomous movement,
+  and watch the console on first enable for any Navigator-related errors.
+- **Ground-finding uses `World#getHighestBlockAt`**, which works well
+  above ground but doesn't understand caves/overhangs - an autonomous NPC
+  wandering near a cave entrance may pick odd destinations. Fine for
+  typical village/overworld wandering; revisit if you want NPCs
+  underground.
+- **`TextDisplay#setViewRange`** is a scalar on the server's own entity
+  tracking range, not a literal block count - `dialog.world-bubble.view-range`
+  is treated as an approximation against a ~64-block baseline. Tune it
+  empirically if bubbles seem to (dis)appear at the wrong distance.
+- The autonomous subsystem adds one more per-tick-interval main-thread scan
+  (`NpcBehaviorManager`, separate from `ProximityGreetingTask`'s own scan) -
+  negligible for a handful of autonomous NPCs, worth watching if you enable
+  it for a large number at once.
 
 ## What's new in 1.10
 
@@ -448,6 +609,12 @@ the conversation isn't lost.
 - `/okotunpc state <npcId> <happiness|fear|anger|fatigue|hunger> <0-100>`
 - `/okotunpc enable <npcId>` / `/okotunpc disable <npcId>` - turns AI chat on/off
   for an NPC (console-friendly, see "What's new in 1.06")
+- `/okotunpc autonomous <npcId> on|off` - turns autonomous wandering on/off
+  (requires AI-enabled first, see "What's new in 1.11")
+- `/okotunpc wander <npcId> <radius> <minDistance> <maxDistance>` - per-NPC
+  wander tuning
+- `/okotunpc behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>` - only
+  WANDER is actually implemented as of 1.11
 - `/okotunpc version` - running version + AI parameters only, never MySQL settings
 - `/okotunpc info <npcId> [player]`
 
@@ -472,7 +639,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/okotu-npc-ai-engine-1.10.jar | grep plugin.yml` after
+  `unzip -l target/okotu-npc-ai-engine-1.12.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

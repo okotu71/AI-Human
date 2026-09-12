@@ -11,12 +11,19 @@ import com.okotu.npcai.db.CleanupTask;
 import com.okotu.npcai.db.Database;
 import com.okotu.npcai.db.DialogHistoryDao;
 import com.okotu.npcai.db.KnowledgeDao;
+import com.okotu.npcai.db.NpcBehaviorDao;
 import com.okotu.npcai.db.NpcProfileDao;
 import com.okotu.npcai.db.NpcStateDao;
 import com.okotu.npcai.db.PlayerMemoryDao;
 import com.okotu.npcai.db.VillageEventDao;
+import com.okotu.npcai.dialog.NpcDialogRenderer;
+import com.okotu.npcai.map.NpcMapStyle;
+import com.okotu.npcai.map.NpcMapSync;
+import com.okotu.npcai.map.Pl3xMapIntegration;
+import com.okotu.npcai.npc.AutonomousNpcRegistry;
 import com.okotu.npcai.npc.ConversationSessionManager;
 import com.okotu.npcai.npc.EnabledNpcRegistry;
+import com.okotu.npcai.npc.NpcBehaviorManager;
 import com.okotu.npcai.npc.NpcBridgeListener;
 import com.okotu.npcai.npc.ProximityGreetingTask;
 import com.okotu.npcai.service.ConversationService;
@@ -46,6 +53,7 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
     private VillageEventDao villageEventDao;
     private KnowledgeDao knowledgeDao;
     private NpcStateDao npcStateDao;
+    private NpcBehaviorDao npcBehaviorDao;
 
     private RecentMessageCache recentMessageCache;
     private OllamaClient ollamaClient;
@@ -55,6 +63,11 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
     private ConversationService conversationService;
     private ConversationSessionManager conversationSessionManager;
     private EnabledNpcRegistry enabledNpcRegistry;
+    private AutonomousNpcRegistry autonomousNpcRegistry;
+    private NpcDialogRenderer npcDialogRenderer;
+    private Pl3xMapIntegration pl3xMapIntegration;
+    private NpcMapStyle npcMapStyle;
+    private NpcMapSync npcMapSync;
 
     private ExecutorService asyncExecutor;
     private OkotuNpcApiImpl apiImpl;
@@ -87,6 +100,20 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
                             + "or fix the underlying database issue and restart.", e);
         }
 
+        try {
+            autonomousNpcRegistry.loadInitialState();
+        } catch (SQLException e) {
+            getLogger().log(Level.SEVERE,
+                    "Could not load the list of autonomous NPCs - starting with none autonomous. "
+                            + "Re-run /okotunpc autonomous <npcId> on for any NPC that should be wandering, "
+                            + "or fix the underlying database issue and restart.", e);
+        }
+
+        if (pluginConfig.pl3xMapEnabled && Bukkit.getPluginManager().getPlugin("Pl3xMap") == null) {
+            getLogger().warning("integrations.pl3xmap.enabled is true, but no plugin named 'Pl3xMap' is "
+                    + "installed on this server - NPC map markers will not appear until it is.");
+        }
+
         getServer().getPluginManager().registerEvents(
                 new NpcBridgeListener(this, new RateLimiter(pluginConfig.perPlayerCooldownMs)),
                 this);
@@ -106,6 +133,16 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskTimer(this, new ProximityGreetingTask(this),
                 pluginConfig.proximityCheckIntervalTicks, pluginConfig.proximityCheckIntervalTicks);
 
+        // Also main-thread: drives Navigator/world checks for autonomous NPCs only -
+        // stationary AI NPCs keep going through ProximityGreetingTask above, unaffected.
+        Bukkit.getScheduler().runTaskTimer(this, new NpcBehaviorManager(this),
+                pluginConfig.autonomousCheckIntervalTicks, pluginConfig.autonomousCheckIntervalTicks);
+
+        // Also main-thread (reads NPC entity locations); no-ops on its own if Pl3xMap
+        // isn't installed or integrations.pl3xmap.enabled/npc-map.enabled is false.
+        Bukkit.getScheduler().runTaskTimer(this, npcMapSync,
+                pluginConfig.npcMapRefreshIntervalTicks, pluginConfig.npcMapRefreshIntervalTicks);
+
         getLogger().info("okotu-npc-ai-engine v" + getDescription().getVersion() + " started."
                 + " Profile: " + pluginConfig.activeProfile
                 + " | Database: " + database.databaseName()
@@ -114,7 +151,9 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
                 + " | Default model: " + pluginConfig.ollamaDefaultModel
                 + " | Right-click trigger: " + pluginConfig.rightClickTriggerEnabled
                 + " | Proximity trigger: " + pluginConfig.proximityTriggerEnabled
-                + " | AI-enabled NPCs: " + enabledNpcRegistry.enabledCount());
+                + " | Autonomous movement: " + pluginConfig.autonomousEnabled
+                + " | AI-enabled NPCs: " + enabledNpcRegistry.enabledCount()
+                + " | Autonomous NPCs: " + autonomousNpcRegistry.autonomousCount());
     }
 
     /**
@@ -143,6 +182,7 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
         this.villageEventDao = new VillageEventDao(database);
         this.knowledgeDao = new KnowledgeDao(database);
         this.npcStateDao = new NpcStateDao(database);
+        this.npcBehaviorDao = new NpcBehaviorDao(database);
 
         this.recentMessageCache = new RecentMessageCache(dialogHistoryDao, pluginConfig);
         this.ollamaClient = new OllamaClient(pluginConfig, getLogger(), asyncExecutor);
@@ -158,6 +198,11 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
 
         this.conversationSessionManager = new ConversationSessionManager(pluginConfig.chatCaptureTimeoutMs);
         this.enabledNpcRegistry = new EnabledNpcRegistry(npcProfileDao);
+        this.autonomousNpcRegistry = new AutonomousNpcRegistry(npcBehaviorDao);
+        this.npcDialogRenderer = new NpcDialogRenderer(this, pluginConfig);
+        this.pl3xMapIntegration = new Pl3xMapIntegration(getLogger(), pluginConfig.npcMapDebug, "[OkotuNpcAiEngine]");
+        this.npcMapStyle = new NpcMapStyle(this);
+        this.npcMapSync = new NpcMapSync(this, pl3xMapIntegration, npcMapStyle);
     }
 
     private void registerApi() {
@@ -251,5 +296,25 @@ public class OkotuNpcAiPlugin extends JavaPlugin {
 
     public RandomProfileGenerator getRandomProfileGenerator() {
         return randomProfileGenerator;
+    }
+
+    public NpcBehaviorDao getNpcBehaviorDao() {
+        return npcBehaviorDao;
+    }
+
+    public AutonomousNpcRegistry getAutonomousNpcRegistry() {
+        return autonomousNpcRegistry;
+    }
+
+    public NpcDialogRenderer getNpcDialogRenderer() {
+        return npcDialogRenderer;
+    }
+
+    public Pl3xMapIntegration getPl3xMapIntegration() {
+        return pl3xMapIntegration;
+    }
+
+    public NpcMapSync getNpcMapSync() {
+        return npcMapSync;
     }
 }

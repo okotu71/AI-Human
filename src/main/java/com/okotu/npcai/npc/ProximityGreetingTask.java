@@ -137,6 +137,7 @@ public class ProximityGreetingTask implements Runnable {
                     }
                     player.sendMessage(ChatColor.GOLD + "[" + npcName + ChatColor.GOLD + "] "
                             + ChatColor.WHITE + greeting);
+                    plugin.getNpcDialogRenderer().show(npc, greeting);
                 }));
     }
 }
