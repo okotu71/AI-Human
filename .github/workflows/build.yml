@@ -1,4 +1,4 @@
-name: okotu-npc-ai-engine
+name: ai-human
 
 on:
   push:
