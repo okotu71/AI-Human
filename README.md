@@ -22,9 +22,26 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`okotu-npc-ai-engine-1.12.jar`. `plugin.yml`'s `version:` field is filled in
+`okotu-npc-ai-engine-1.13.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.13
+
+- **Build fix (first real CI compile against actual Citizens API)**:
+  `NpcMovementController.navigateTo` called `Navigator#setTarget(Location, boolean)`,
+  which doesn't exist on the real Citizens API - the two-argument overload
+  is `setTarget(Entity target, boolean aggressive)` (used for chasing an
+  entity, e.g. combat), not for a plain `Location`. The single-argument
+  `setTarget(Location location)` is the correct call for walking to a
+  point, which is all `NpcMovementController` ever needed. Fixed - this was
+  flagged as an unverified assumption in the 1.11 README notes, and is
+  exactly the kind of thing only a real build against the real Citizens jar
+  can catch; no other `Navigator`/`NPC` calls in the autonomous-movement
+  code changed. If your build turns up further Citizens API mismatches
+  (`isNavigating()`, `cancelNavigation()`, `getLocalParameters().speedModifier(...)`,
+  `faceLocation(...)` are the remaining unverified ones), send the compiler
+  error and they'll get the same treatment.
 
 ## What's new in 1.12
 
@@ -639,7 +656,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/okotu-npc-ai-engine-1.12.jar | grep plugin.yml` after
+  `unzip -l target/okotu-npc-ai-engine-1.13.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

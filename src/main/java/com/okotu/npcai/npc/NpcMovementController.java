@@ -59,6 +59,6 @@ public class NpcMovementController {
     /** Starts (or redirects) the NPC's Navigator toward {@code destination}. */
     public void navigateTo(NPC npc, Location destination, double walkSpeed) {
         npc.getNavigator().getLocalParameters().speedModifier((float) walkSpeed);
-        npc.getNavigator().setTarget(destination, false);
+        npc.getNavigator().setTarget(destination);
     }
 }
