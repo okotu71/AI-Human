@@ -1,4 +1,4 @@
-# okotu-npc-ai-engine
+# AI-Human
 
 Paper/Spigot plugin that connects Citizens-managed NPCs to an Ollama docking
 service and gives them layered, persistent memory: a stable character sheet,
@@ -22,9 +22,69 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`okotu-npc-ai-engine-1.13.jar`. `plugin.yml`'s `version:` field is filled in
+`ai-human-1.14.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.14
+
+**The plugin is renamed: `okotu-npc-ai-engine` → `AI-Human`.** Everything
+that identifies the plugin changed; nothing about how it works did.
+
+- Bukkit plugin name: `OkotuNpcAiEngine` → `AI-Human`
+- Command: `/okotunpc` → `/aihuman` (every subcommand keeps its name -
+  `reload`, `profile`, `enable`, `autonomous`, `version`, etc. - only the
+  base command changed)
+- Permissions: `okotu.npcai.admin` / `okotu.npcai.talk` →
+  `aihuman.admin` / `aihuman.talk`
+- Maven artifact: `okotu-npc-ai-engine` → `ai-human` (jar is now
+  `ai-human-1.14.jar`)
+- Java package: `com.okotu.npcai` → `com.okotu.aihuman` (kept `okotu` -
+  that's your author namespace, not part of the old plugin name)
+- Main class `OkotuNpcAiPlugin` → `AiHumanPlugin`, command handler
+  `OkotuCommand` → `AiHumanCommand`, public API `OkotuNpcApi`/`OkotuNpcApiImpl`
+  → `AiHumanApi`/`AiHumanApiImpl` (if anything external was integrating via
+  the Bukkit `ServicesManager` against `OkotuNpcApi`, update that reference)
+- Log prefix `[OkotuNpcAiEngine]` (used by the Pl3xMap debug logging) →
+  `[AI-Human]`
+- `plugin.yml`'s `website:` updated to `https://github.com/okotu71/AI-Human`
+  - **this is an assumption**, not a confirmed URL; tell me the real repo
+  location if it's different and it'll get corrected.
+
+**Deliberately NOT renamed** (would affect live data / existing configs,
+and wasn't asked for):
+
+- MySQL database names (`okotu_npc_ai` / `okotu_npc_ai_test`), table names
+  (`npc_profiles`, `npc_player_memory`, etc.), and the SQL files under
+  `sql/` - these are your own configured values / the actual schema,
+  renaming them would need a real data migration with no functional
+  upside.
+- `config.yml` key names (`npc-defaults`, `npc-map`, `conversation`, etc.) -
+  these describe the Minecraft-NPC domain model, not the old plugin brand,
+  and renaming them would silently break every existing `config.yml`
+  without a matching key.
+
+### ⚠️ Action required after upgrading: move your config.yml
+
+Bukkit derives a plugin's data folder from its name. Your real
+configuration - MySQL credentials, Ollama address, every tuned parameter -
+currently lives at `plugins/OkotuNpcAiEngine/config.yml`. After deploying
+1.14, Bukkit will look for `plugins/AI-Human/config.yml` instead, won't
+find it, and will generate a **fresh default config** there (placeholder
+`ip_server`, `usr`/`psw`, etc.) - not because anything was lost, but
+because the plugin has a new folder to look in.
+
+Before starting the server on 1.14:
+
+```bash
+cp plugins/OkotuNpcAiEngine/config.yml plugins/AI-Human/config.yml
+```
+
+(create `plugins/AI-Human/` first if the server hasn't been started on
+1.14 yet - or just start it once to let it generate the folder/default
+file, then overwrite that file with your real one and restart). Your MySQL
+data itself is untouched either way - this is purely a local file, not a
+database migration.
 
 ## What's new in 1.13
 
@@ -51,7 +111,7 @@ working in a sister project (mc-safeguard's Fabulous Claims/zones map
 overlay) rather than guessing at the API from scratch - see that project's
 2.0.11-2.0.16 patch notes for the full history of what was tried and why.
 
-- **`com.okotu.npcai.map.Pl3xMapIntegration`** replaces 1.11's
+- **`com.okotu.aihuman.map.Pl3xMapIntegration`** replaces 1.11's
   `NoOpPl3xMapIntegration` stub - same class, same approach as mc-safeguard:
   talks to Pl3xMap **purely via `java.lang.reflect`**, resolved once and
   cached. **Still no Maven dependency on Pl3xMap** (see the comment in
@@ -85,19 +145,19 @@ overlay) rather than guessing at the API from scratch - see that project's
   the markers look and how often they refresh - both default to sensible
   values, so turning `pl3xmap.enabled: true` on a server with Pl3xMap
   installed should just work with zero further tuning.
-- `/okotunpc version` now reports `pl3xmap=true (present=true/false)` -
+- `/aihuman version` now reports `pl3xmap=true (present=true/false)` -
   `present` reflects `Pl3xMapIntegration#isPresent()`, i.e. whether Pl3xMap
   is actually installed, enabled, and successfully resolved via reflection
   right now - not just whether the config flag is on.
 
 ### Known limitation carried over from mc-safeguard's own notes
 
-Toggling `npc-map.debug` (or any `npc-map.*` value) via `/okotunpc reload`
+Toggling `npc-map.debug` (or any `npc-map.*` value) via `/aihuman reload`
 updates the *style* immediately (`NpcMapStyle` re-reads config.yml live),
 but the `Pl3xMapIntegration`/`NpcMapSync` instances themselves are built
 once at startup and not recreated on reload - same deliberate tradeoff
 already made for `ConversationSessionManager`'s timeout in 1.06, to avoid
-tearing down live state on every `/okotunpc reload`. A full restart picks
+tearing down live state on every `/aihuman reload`. A full restart picks
 up a changed `debug` flag or a Pl3xMap install that appeared after startup.
 
 ## What's new in 1.11
@@ -113,13 +173,13 @@ AI NPCs (`autonomous` left off) behave exactly like 1.10, unaffected.
 - New `npc_behavior_config` table (one row per NPC, only meaningful once
   `autonomous` is true): behavior type, home point, wander radius/min/max
   distance, detection radius, and per-NPC safety overrides.
-- `/okotunpc autonomous <npcId> on|off` - turns wandering on (capturing the
+- `/aihuman autonomous <npcId> on|off` - turns wandering on (capturing the
   NPC's current position as its home/anchor point) or off (keeps all its
   settings, just stops moving). Requires the NPC to already be AI-enabled
-  (`/okotunpc enable`) - autonomy is a layer on top of that, not a
+  (`/aihuman enable`) - autonomy is a layer on top of that, not a
   replacement.
-- `/okotunpc wander <npcId> <radius> <minDistance> <maxDistance>` and
-  `/okotunpc behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>` tune a
+- `/aihuman wander <npcId> <radius> <minDistance> <maxDistance>` and
+  `/aihuman behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>` tune a
   specific NPC. **Only `WANDER` is actually implemented** - the other four
   are accepted and stored (so the schema/commands don't need to change
   again later) but currently behave like WANDER. The command warns you
@@ -222,10 +282,10 @@ implementation instead of a stub.
   hit this on 1.09, there's nothing to migrate: the tables were never
   created in the first place, so updating the jar and restarting is enough -
   `CREATE TABLE IF NOT EXISTS` will simply succeed this time.
-- **`/okotunpc info <npcId>` now shows the plugin version and author** right
-  under the NPC's name line (`okotu-npc-ai-engine vX.XX by okotu71`).
-- **`/okotunpc version` now shows the GitHub link**
-  (`https://github.com/okotu71/NPC-AI-Engine`), and the plugin's own
+- **`/aihuman info <npcId>` now shows the plugin version and author** right
+  under the NPC's name line (`AI-Human vX.XX by okotu71`).
+- **`/aihuman version` now shows the GitHub link**
+  (`https://github.com/okotu71/AI-Human`), and the plugin's own
   `author`/`website` fields in `plugin.yml` are set too (so Bukkit's
   built-in `/plugins` and `/version` commands show proper attribution as well).
 - **Ollama performance tuning, expanded.** `OllamaClient` now sends the
@@ -243,7 +303,7 @@ implementation instead of a stub.
   that change nothing versus 1.09 until you tune them (except `num_ctx`,
   which is a genuine new speed lever - lower than most models' own default
   context size, matched to how short this plugin's prompts are designed to
-  be). `/okotunpc version` shows all of them.
+  be). `/aihuman version` shows all of them.
 
 ## What's new in 1.09
 
@@ -323,15 +383,15 @@ implementation instead of a stub.
   disabled NPC is completely inert to this plugin: right-click passes
   through untouched (for whatever other plugin wants it) and it's skipped
   entirely by the proximity scan.
-- **`/okotunpc enable <npcId>`** turns AI chat on for an NPC - creates its
+- **`/aihuman enable <npcId>`** turns AI chat on for an NPC - creates its
   character sheet (via the same random-profile pools as before) if it
   doesn't have one yet, or just flips the flag back on if it was previously
   disabled (keeping whatever backstory/knowledge/relationships it already
-  had). **`/okotunpc disable <npcId>`** turns it back off without deleting
+  had). **`/aihuman disable <npcId>`** turns it back off without deleting
   any of that data. Both take a plain numeric NPC id and work identically
   from the server console or in-game - no dependency on Citizens' own
   in-game "selected NPC" concept, which doesn't exist for a console sender.
-- **`/okotunpc version`** prints the running plugin version plus every
+- **`/aihuman version`** prints the running plugin version plus every
   AI-related parameter currently loaded (Ollama address, model, keep-alive,
   num-predict, temperature, timeouts/retries, conversation/summary/
   relationship/interaction settings, count of AI-enabled NPCs) - and
@@ -490,10 +550,10 @@ recent raw messages are passed separately as chat history to Ollama's
 
 `npc_player_memory.relationship_score` (-100..100, clamped) drives the
 MEMORIA section's tone description. Adjust it via:
-- `/okotunpc relationship <npcId> <player> <delta>` (raw number), or
-- `/okotunpc relationship <npcId> <player> action:<key>` using a named delta
+- `/aihuman relationship <npcId> <player> <delta>` (raw number), or
+- `/aihuman relationship <npcId> <player> action:<key>` using a named delta
   from `relationship.actions` in `config.yml` (e.g. `action:saved-villager`), or
-- the public API (`OkotuNpcApi#adjustRelationship` / `#applyRelationshipAction`)
+- the public API (`AiHumanApi#adjustRelationship` / `#applyRelationshipAction`)
   from another plugin - e.g. hook it into your economy/quest/combat events.
 
 ### Ollama docking: prod vs test, same as MySQL
@@ -507,8 +567,8 @@ disposable Ollama instance if you want.
 ## Structure
 
 ```
-src/main/java/com/okotu/npcai/
-├── OkotuNpcAiPlugin.java          # bootstrap: wires everything, registers the OkotuNpcApi service
+src/main/java/com/okotu/aihuman/
+├── AiHumanPlugin.java          # bootstrap: wires everything, registers the AiHumanApi service
 ├── config/PluginConfig.java       # typed config.yml reading, incl. prod/test profile (mysql+ollama)
 ├── db/
 │   ├── Database.java               # HikariCP pool + schema.sql application + table-prefix resolution
@@ -529,10 +589,10 @@ src/main/java/com/okotu/npcai/
 │   ├── SummaryService.java         # the memory-compression mechanic
 │   └── RelationshipService.java    # score clamping + named actions + qualitative description
 ├── api/
-│   ├── OkotuNpcApi.java            # public interface for other plugins (Bukkit service)
-│   └── OkotuNpcApiImpl.java
+│   ├── AiHumanApi.java            # public interface for other plugins (Bukkit service)
+│   └── AiHumanApiImpl.java
 ├── npc/NpcBridgeListener.java      # NPC click -> chat capture -> reply
-├── command/OkotuCommand.java       # /okotunpc reload|profile|knowledge|event|relationship|state|info
+├── command/AiHumanCommand.java       # /aihuman reload|profile|knowledge|event|relationship|state|info
 └── util/RateLimiter.java           # per-player cooldown
 
 sql/
@@ -569,7 +629,7 @@ active-profile: "prod"   # or "test"
 
 Override without editing the file via `-Dokotu.profile=test` on server
 startup (wins over the config value). Switching requires a restart or
-`/okotunpc reload` - it doesn't hot-swap an already-open connection mid-session.
+`/aihuman reload` - it doesn't hot-swap an already-open connection mid-session.
 
 ### 3. Build
 
@@ -579,9 +639,9 @@ mvn clean package
 
 ### 4. First run
 
-If `plugins/OkotuNpcAiEngine/config.yml` doesn't exist yet, the plugin
+If `plugins/AI-Human/config.yml` doesn't exist yet, the plugin
 creates it from the bundled default on startup. Edit it, then
-`/okotunpc reload`.
+`/aihuman reload`.
 
 > **About `plugin.yml`**: it's a **build-time** manifest packaged inside the
 > jar (it's what tells Bukkit/Paper the plugin exists at all), so it can't be
@@ -591,7 +651,7 @@ creates it from the bundled default on startup. Edit it, then
 ## In-game usage
 
 **An NPC only responds if an admin has enabled it first** with
-`/okotunpc enable <npcId>` (see "What's new in 1.06") - a freshly-placed
+`/aihuman enable <npcId>` (see "What's new in 1.06") - a freshly-placed
 Citizens NPC stays silent until then.
 
 Two ways to start talking to an enabled NPC (both on by default, see
@@ -610,40 +670,40 @@ Ollama with the assembled prompt, and the reply appears prefixed with the
 NPC's name. On timeout/error, a random `fallback.messages` entry is used and
 the conversation isn't lost.
 
-## Commands (permission `okotu.npcai.admin`, default op)
+## Commands (permission `aihuman.admin`, default op)
 
-- `/okotunpc reload`
-- `/okotunpc profile <npcId> <field> <value...>` - fields: `name`, `role`,
+- `/aihuman reload`
+- `/aihuman profile <npcId> <field> <value...>` - fields: `name`, `role`,
   `personality`, `background`, `village`, `profession`, `speech_style`,
   `knowledge`, `system_prompt` (no `model` field since 1.04 - see "What's new
   in 1.04")
-- `/okotunpc knowledge add <npcId> <topic> <text...>` /
-  `/okotunpc knowledge remove <npcId> <topic>`
-- `/okotunpc event add <village> <priority> <expiresHours|never> <summary...>` /
-  `/okotunpc event remove <eventId>`
-- `/okotunpc relationship <npcId> <player> <delta>` or
-  `/okotunpc relationship <npcId> <player> action:<key>`
-- `/okotunpc state <npcId> <happiness|fear|anger|fatigue|hunger> <0-100>`
-- `/okotunpc enable <npcId>` / `/okotunpc disable <npcId>` - turns AI chat on/off
+- `/aihuman knowledge add <npcId> <topic> <text...>` /
+  `/aihuman knowledge remove <npcId> <topic>`
+- `/aihuman event add <village> <priority> <expiresHours|never> <summary...>` /
+  `/aihuman event remove <eventId>`
+- `/aihuman relationship <npcId> <player> <delta>` or
+  `/aihuman relationship <npcId> <player> action:<key>`
+- `/aihuman state <npcId> <happiness|fear|anger|fatigue|hunger> <0-100>`
+- `/aihuman enable <npcId>` / `/aihuman disable <npcId>` - turns AI chat on/off
   for an NPC (console-friendly, see "What's new in 1.06")
-- `/okotunpc autonomous <npcId> on|off` - turns autonomous wandering on/off
+- `/aihuman autonomous <npcId> on|off` - turns autonomous wandering on/off
   (requires AI-enabled first, see "What's new in 1.11")
-- `/okotunpc wander <npcId> <radius> <minDistance> <maxDistance>` - per-NPC
+- `/aihuman wander <npcId> <radius> <minDistance> <maxDistance>` - per-NPC
   wander tuning
-- `/okotunpc behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>` - only
+- `/aihuman behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>` - only
   WANDER is actually implemented as of 1.11
-- `/okotunpc version` - running version + AI parameters only, never MySQL settings
-- `/okotunpc info <npcId> [player]`
+- `/aihuman version` - running version + AI parameters only, never MySQL settings
+- `/aihuman info <npcId> [player]`
 
 ## Public API for other plugins
 
-`OkotuNpcApi`, registered as a Bukkit service:
+`AiHumanApi`, registered as a Bukkit service:
 
 ```java
-RegisteredServiceProvider<OkotuNpcApi> rsp =
-        Bukkit.getServicesManager().getRegistration(OkotuNpcApi.class);
+RegisteredServiceProvider<AiHumanApi> rsp =
+        Bukkit.getServicesManager().getRegistration(AiHumanApi.class);
 if (rsp != null) {
-    OkotuNpcApi api = rsp.getProvider();
+    AiHumanApi api = rsp.getProvider();
     api.applyRelationshipAction(npcId, playerUuid, "saved-villager");
     api.addVillageEvent("Oak", 5, "Gli zombie hanno distrutto il ponte.",
             Instant.now().plus(3, ChronoUnit.DAYS));
@@ -656,7 +716,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/okotu-npc-ai-engine-1.13.jar | grep plugin.yml` after
+  `unzip -l target/ai-human-1.14.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a
@@ -708,13 +768,13 @@ upgrading a server with existing NPCs that are already talking.
    (default `0`).
 3. **Every NPC that was already talking under 1.05 will go silent** the
    moment that column lands, because it defaults to disabled. Either:
-   - re-enable them one at a time as needed: `/okotunpc enable <npcId>`, or
+   - re-enable them one at a time as needed: `/aihuman enable <npcId>`, or
    - uncomment the bulk `UPDATE npc_profiles SET enabled = 1;` line at the
      bottom of the migration script to flip every existing NPC back on at
      once, preserving the "everything talks" behaviour from 1.05 and
      earlier.
 4. Going forward, any newly placed Citizens NPC stays silent until you
-   explicitly run `/okotunpc enable <npcId>` for it - there's no config
+   explicitly run `/aihuman enable <npcId>` for it - there's no config
    toggle to bring back "every NPC talks automatically" as the default,
    this is intentionally opt-in now.
 
@@ -753,7 +813,7 @@ Steps:
      `personalita` -> `personality`, `backstory` -> `background`; `role`,
      `village`, `profession`, `speech_style` come across empty/NULL since
      1.01 never captured them - fill them in afterwards with
-     `/okotunpc profile ...`);
+     `/aihuman profile ...`);
    - copies `npc_conversation_log` -> `npc_dialog_history` (straight column
      rename, same data);
    - seeds `npc_player_memory` with `last_seen` inferred from the migrated

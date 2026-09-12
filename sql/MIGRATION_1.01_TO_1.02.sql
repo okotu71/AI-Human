@@ -1,5 +1,5 @@
 -- =========================================================
--- okotu-npc-ai-engine - data migration 1.01 -> 1.02
+-- AI-Human - data migration 1.01 -> 1.02
 -- =========================================================
 -- 1.02 renames/redesigns the character table (npc_character -> npc_profiles,
 -- richer fields) and the dialog table (npc_conversation_log -> npc_dialog_history,
@@ -15,7 +15,7 @@
 --    1.02 splits "backstory" into background, and has new structured fields
 --    (role, village, profession, speech_style) that 1.01 never captured -
 --    they come across empty/NULL and you'll want to fill them in via
---    /okotunpc profile ... afterwards.
+--    /aihuman profile ... afterwards.
 INSERT INTO npc_profiles (npc_id, name, role, personality, background, village, profession, speech_style, model)
 SELECT npc_id, nome, '', personalita, backstory, NULL, NULL, NULL, model
 FROM npc_character

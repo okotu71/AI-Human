@@ -1,23 +1,23 @@
-name: OkotuNpcAiEngine
+name: AI-Human
 version: '${project.version}'
-main: com.okotu.npcai.OkotuNpcAiPlugin
+main: com.okotu.aihuman.AiHumanPlugin
 api-version: '1.20'
 author: okotu71
-website: https://github.com/okotu71/NPC-AI-Engine
+website: https://github.com/okotu71/AI-Human
 description: AI dialogue engine for Citizens NPCs, backed by Ollama and MySQL persistence.
 
 depend: [Citizens]
 
 commands:
-  okotunpc:
-    description: Admin commands for okotu-npc-ai-engine
-    usage: /okotunpc <reload|profile|knowledge|event|relationship|state|enable|disable|autonomous|wander|behavior|version|info>
-    permission: okotu.npcai.admin
+  aihuman:
+    description: Admin commands for AI-Human
+    usage: /aihuman <reload|profile|knowledge|event|relationship|state|enable|disable|autonomous|wander|behavior|version|info>
+    permission: aihuman.admin
 
 permissions:
-  okotu.npcai.admin:
+  aihuman.admin:
     description: Allows managing the plugin (reload, per-NPC configuration)
     default: op
-  okotu.npcai.talk:
+  aihuman.talk:
     description: Allows talking to NPCs managed by the plugin
     default: true

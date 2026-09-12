@@ -1,5 +1,5 @@
 -- =========================================================
--- okotu-npc-ai-engine - MySQL schema (template) - v1.02
+-- AI-Human - MySQL schema (template) - v1.02
 -- =========================================================
 -- Applied automatically by Database.java on startup (CREATE TABLE IF NOT
 -- EXISTS), against whichever database the active profile (prod/test) points
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_state (
 -- from config.yml" rather than a per-NPC override.
 CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_behavior_config (
     npc_id               INT UNSIGNED NOT NULL,
-    autonomous           TINYINT(1)   NOT NULL DEFAULT 0,  -- master per-NPC switch, see /okotunpc autonomous
+    autonomous           TINYINT(1)   NOT NULL DEFAULT 0,  -- master per-NPC switch, see /aihuman autonomous
     behavior_type        ENUM('WANDER','VILLAGE','TRAVEL','GUARD','FOLLOW') NOT NULL DEFAULT 'WANDER',
     -- Only WANDER is actually implemented as of 1.11 - the others are accepted
     -- and stored for forward compatibility but currently behave like WANDER.

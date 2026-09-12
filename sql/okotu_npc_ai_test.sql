@@ -1,5 +1,5 @@
 -- =========================================================
--- okotu-npc-ai-engine v1.02 - TEST database (okotu_npc_ai_test)
+-- AI-Human v1.02 - TEST database (okotu_npc_ai_test)
 -- =========================================================
 -- Manual reference copy (empty mysql-table-prefix, the default). The plugin
 -- also applies this schema automatically on startup. If you use a table

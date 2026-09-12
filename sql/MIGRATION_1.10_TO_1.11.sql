@@ -1,5 +1,5 @@
 -- =========================================================
--- okotu-npc-ai-engine - data migration 1.10 -> 1.11
+-- AI-Human - data migration 1.10 -> 1.11
 -- =========================================================
 -- 1.11 adds autonomous movement (wandering + an approach/talk state machine)
 -- as an OPT-IN layer on top of AI-enabled NPCs. This only adds one new
@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS npc_behavior_config (
 --    like 1.10 (stationary, proximity/click-triggered conversation) until
 --    you opt individual NPCs into autonomous movement:
 --
---    /okotunpc autonomous <npcId> on
+--    /aihuman autonomous <npcId> on
 --
 -- This captures the NPC's current position as its "home" point and starts
 -- it wandering within interaction.autonomous.default-wander-radius (or its
--- own override, set via /okotunpc wander <npcId> <radius> <min> <max>).
+-- own override, set via /aihuman wander <npcId> <radius> <min> <max>).

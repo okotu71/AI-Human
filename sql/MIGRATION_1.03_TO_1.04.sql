@@ -1,5 +1,5 @@
 -- =========================================================
--- okotu-npc-ai-engine - data migration 1.02/1.03 -> 1.04
+-- AI-Human - data migration 1.02/1.03 -> 1.04
 -- =========================================================
 -- 1.04 removes the per-NPC "model" override: every NPC now uses whatever
 -- ollama.default-model is configured in config.yml (change it there, e.g.

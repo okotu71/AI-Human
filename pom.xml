@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.okotu</groupId>
-    <artifactId>okotu-npc-ai-engine</artifactId>
-    <version>1.13</version>
+    <artifactId>ai-human</artifactId>
+    <version>1.14</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -108,7 +108,7 @@
              Its published API coordinates/version aren't something this
              environment could verify against a real repository, and getting
              them wrong breaks the build for everyone. Pl3xMapIntegration
-             (com.okotu.npcai.map) therefore talks to Pl3xMap purely via
+             (com.okotu.aihuman.map) therefore talks to Pl3xMap purely via
              java.lang.reflect, resolved once and cached - the same approach
              used in mc-safeguard's Pl3xMap bridge, which this one is adapted
              from. This means: no extra dependency, no extra repository, the
@@ -133,7 +133,7 @@
             </plugin>
 
             <!-- Shade: impacchetta HikariCP/Caffeine/Gson/driver MySQL nel jar finale,
-                 relocati sotto com.okotu.npcai.libs per evitare conflitti con altri plugin
+                 relocati sotto com.okotu.aihuman.libs per evitare conflitti con altri plugin
                  che potrebbero avere versioni diverse delle stesse librerie sul classpath. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -149,19 +149,19 @@
                             <relocations>
                                 <relocation>
                                     <pattern>com.zaxxer.hikari</pattern>
-                                    <shadedPattern>com.okotu.npcai.libs.hikari</shadedPattern>
+                                    <shadedPattern>com.okotu.aihuman.libs.hikari</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.github.benmanes.caffeine</pattern>
-                                    <shadedPattern>com.okotu.npcai.libs.caffeine</shadedPattern>
+                                    <shadedPattern>com.okotu.aihuman.libs.caffeine</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.google.gson</pattern>
-                                    <shadedPattern>com.okotu.npcai.libs.gson</shadedPattern>
+                                    <shadedPattern>com.okotu.aihuman.libs.gson</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.mysql</pattern>
-                                    <shadedPattern>com.okotu.npcai.libs.mysql</shadedPattern>
+                                    <shadedPattern>com.okotu.aihuman.libs.mysql</shadedPattern>
                                 </relocation>
                             </relocations>
                             <filters>

@@ -1,5 +1,5 @@
 # =========================================================
-# okotu-npc-ai-engine - configuration (v1.03)
+# AI-Human - configuration (v1.03)
 # =========================================================
 
 # Which profile to use: "prod" or "test" (see the "prod" / "test" blocks
@@ -162,7 +162,7 @@ conversation:
 # player ever talks to a given NPC (see RandomProfileGenerator). One entry is
 # picked independently from each list. Village and per-NPC model are never
 # randomized - see the README "What's new in 1.03" section for why. Edit
-# these freely, or use /okotunpc profile to override any single NPC afterwards.
+# these freely, or use /aihuman profile to override any single NPC afterwards.
 npc-defaults:
   roles:
     - "Villager"
@@ -202,8 +202,8 @@ relationship:
   min: -100
   max: 100
   default: 0
-  # Named deltas usable via the public API (OkotuNpcApi#applyRelationshipAction)
-  # and via "/okotunpc relationship <npcId> <player> action:<key>". Feel free
+  # Named deltas usable via the public API (AiHumanApi#applyRelationshipAction)
+  # and via "/aihuman relationship <npcId> <player> action:<key>". Feel free
   # to add your own keys here and reference them from other plugins/commands.
   actions:
     bought-item: 5
@@ -236,7 +236,7 @@ interaction:
   # Autonomous movement (1.11+): NPCs that wander the world on their own and
   # approach players themselves instead of standing still waiting to be
   # noticed. Off per-NPC by default even when this whole subsystem is
-  # enabled - see /okotunpc autonomous <npcId> on. Citizens handles the
+  # enabled - see /aihuman autonomous <npcId> on. Citizens handles the
   # actual walking/pathfinding (its Navigator); this plugin only decides
   # WHERE to send an NPC and WHEN to approach/talk, never individual steps.
   autonomous:
@@ -252,8 +252,8 @@ interaction:
     # this plugin re-decides things like a new destination or a state
     # transition. Lower = more responsive, more CPU work per NPC.
     check-interval-ticks: 40
-    # Per-NPC overrides exist for all of these via /okotunpc wander /
-    # /okotunpc autonomous - these are just the defaults for a newly
+    # Per-NPC overrides exist for all of these via /aihuman wander /
+    # /aihuman autonomous - these are just the defaults for a newly
     # autonomous-enabled NPC.
     default-wander-radius: 500
     default-wander-min-distance: 30
@@ -307,7 +307,7 @@ dialog:
 integrations:
   # Pl3xMap (1.12+): shows AI-enabled NPCs as live markers on your Pl3xMap
   # web map. Talks to Pl3xMap purely via reflection (see
-  # com.okotu.npcai.map.Pl3xMapIntegration, adapted from the same bridge
+  # com.okotu.aihuman.map.Pl3xMapIntegration, adapted from the same bridge
   # used by mc-safeguard's Fabulous Claims/zones map overlay) - no Maven
   # dependency on Pl3xMap, and it simply does nothing (logged clearly) if
   # Pl3xMap isn't installed or its version doesn't match the reflected
@@ -323,7 +323,7 @@ integrations:
 # centered on the NPC is the honest, working option for now).
 npc-map:
   enabled: true
-  # Verbose [OkotuNpcAiEngine] log lines about exactly which Pl3xMap
+  # Verbose [AI-Human] log lines about exactly which Pl3xMap
   # classes/methods were found via reflection, and why a marker update was
   # skipped, if any. Turn back off once confirmed working - it's chatty.
   debug: false

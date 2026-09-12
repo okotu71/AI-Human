@@ -1,11 +1,11 @@
 -- =========================================================
--- okotu-npc-ai-engine - data migration 1.05 -> 1.06
+-- AI-Human - data migration 1.05 -> 1.06
 -- =========================================================
 -- 1.06 makes AI chat opt-in per NPC: a new npc_profiles.enabled column
 -- (TINYINT(1), default 0) controls whether an NPC will talk to players at
 -- all. New NPCs no longer start talking automatically the first time a
 -- player clicks/approaches - an admin has to explicitly run
--- /okotunpc enable <npcId> first (console-friendly, no in-game NPC
+-- /aihuman enable <npcId> first (console-friendly, no in-game NPC
 -- selection needed).
 --
 -- IMPORTANT BEHAVIOUR CHANGE if you're upgrading with existing data: every
@@ -25,5 +25,5 @@ ALTER TABLE npc_profiles
 -- UPDATE npc_profiles SET enabled = 1;
 
 -- 3) Going forward, enable/disable NPCs individually with:
---    /okotunpc enable <npcId>
---    /okotunpc disable <npcId>
+--    /aihuman enable <npcId>
+--    /aihuman disable <npcId>
