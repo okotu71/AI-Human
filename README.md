@@ -22,9 +22,73 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`ai-human-1.14.jar`. `plugin.yml`'s `version:` field is filled in
+`ai-human-1.15.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.15
+
+### Bug fix: autonomous NPCs standing still (or barely moving)
+
+Root cause: `NpcMovementController` picked a hop distance between
+`wanderMinDistance` and `wanderMaxDistance`, then rejected the candidate if
+it landed further than `wanderRadius` from home. If an admin set, say,
+`radius=200 minDistance=500 maxDistance=2000` (radius smaller than the hop
+range), **every single candidate was guaranteed to exceed the radius** -
+the NPC would fail to find a destination on every cycle, forever, with
+nothing in the logs to explain why it just stood there.
+
+Fixed two ways:
+
+- `NpcMovementController.pickDestination` now clamps `wanderMinDistance`/
+  `wanderMaxDistance` to `wanderRadius` before picking, so a destination is
+  always findable regardless of how the three numbers relate to each other -
+  this self-corrects NPCs that are already configured with a conflicting
+  combination, no need to re-run the command.
+- `/aihuman wander` now rejects `minDistance > radius` outright (explaining
+  exactly why that combination would never let the NPC move, with a
+  corrected example command), and warns (but allows) `maxDistance > radius`.
+
+**If your NPCs are still barely moving**: radius should be `>=` maxDistance.
+For a wide 2000-block roam area with 200-500 block hops:
+`/aihuman wander <npcId> 2000 200 500` (radius first, then min, then max).
+
+### Pl3xMap: NPCs can now look like little people instead of a dot
+
+Only `Marker.rectangle(...)` was confirmed working (from mc-safeguard) as of
+1.12-1.14, so every NPC was drawn as a small square. As of 1.15,
+`Pl3xMapIntegration` also attempts icon-based markers -
+`Marker.icon(String, Point, String)` plus an `IconRegistry` - resolved via
+the same reflection-with-graceful-fallback approach as everything else in
+this bridge. **This is best-effort, unlike the rectangle path**: it isn't
+confirmed against a real Pl3xMap install, so if any part of it doesn't
+resolve on your version, icon mode silently turns itself off for the
+session and every NPC keeps drawing as the same square as before - a wrong
+guess here can't break what already worked.
+
+- `NpcIconFactory` generates a small "person" icon at runtime (a colored
+  head-and-shoulders silhouette, autonomous NPCs in one color, stationary
+  in another, matching your `npc-map.stationary`/`npc-map.autonomous` fill
+  colors) via `Graphics2D` - no bundled image file, no network fetch.
+  **This is a stylized generic icon, not the NPC's actual face/skin** -
+  extracting and using a Citizens NPC's real skin texture is meaningfully
+  more work (fetching/caching the texture, cropping the head, keeping it in
+  sync if the skin changes) and wasn't attempted here. Say the word if you
+  want that as a follow-up.
+- Also attempts to make the tooltip **permanently visible** (like a player
+  nameplate) instead of hover-only, trying a couple of plausible method
+  names on Pl3xMap's `Options.Builder` (`tooltipPermanent`/`permanentTooltip`).
+  Equally best-effort: if neither resolves, the tooltip still works, just
+  on hover only, exactly like 1.12-1.14.
+- New `npc-map.icon-mode` (default `true`) - set to `false` to force the
+  square markers even if icon mode would otherwise be available (e.g. if
+  you don't like how the generated icon looks, or want to wait for a real
+  skin-based icon in a future version).
+- **Turn on `npc-map.debug: true` and check the console after this
+  upgrade.** It will log plainly whether icon mode resolved or fell back,
+  and why - this is the fastest way to find out whether your specific
+  Pl3xMap version supports it, without needing to guess from how the map
+  looks alone.
 
 ## What's new in 1.14
 
@@ -38,7 +102,7 @@ that identifies the plugin changed; nothing about how it works did.
 - Permissions: `okotu.npcai.admin` / `okotu.npcai.talk` →
   `aihuman.admin` / `aihuman.talk`
 - Maven artifact: `okotu-npc-ai-engine` → `ai-human` (jar is now
-  `ai-human-1.14.jar`)
+  `ai-human-1.15.jar`)
 - Java package: `com.okotu.npcai` → `com.okotu.aihuman` (kept `okotu` -
   that's your author namespace, not part of the old plugin name)
 - Main class `OkotuNpcAiPlugin` → `AiHumanPlugin`, command handler
@@ -716,7 +780,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/ai-human-1.14.jar | grep plugin.yml` after
+  `unzip -l target/ai-human-1.15.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

@@ -113,6 +113,7 @@ public class PluginConfig {
     public final boolean npcMapDebug;
     public final long npcMapRefreshIntervalTicks;
     public final double npcMapMarkerSize;
+    public final boolean npcMapIconMode;
 
     // --- rate limit ---
     public final long perPlayerCooldownMs;
@@ -239,6 +240,7 @@ public class PluginConfig {
         this.npcMapDebug = cfg.getBoolean("npc-map.debug", false);
         this.npcMapRefreshIntervalTicks = cfg.getLong("npc-map.refresh-interval-seconds", 10) * 20L;
         this.npcMapMarkerSize = cfg.getDouble("npc-map.marker-size", 1.0);
+        this.npcMapIconMode = cfg.getBoolean("npc-map.icon-mode", true);
 
         this.perPlayerCooldownMs = cfg.getLong("rate-limit.per-player-cooldown-ms", 3000);
 

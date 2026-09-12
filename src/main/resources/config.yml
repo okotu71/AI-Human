@@ -331,8 +331,16 @@ npc-map:
   # NOT every tick: autonomous NPCs move continuously while wandering, so
   # this is a deliberately low-frequency poll rather than a per-step update.
   refresh-interval-seconds: 10
-  # Width/depth (blocks) of the square drawn on the map, centered on the NPC.
+  # Width/depth (blocks) of the square drawn on the map when icon mode (below)
+  # isn't available, centered on the NPC.
   marker-size: 1.0
+  # If true, draws each NPC as a small generated "person" icon (a colored
+  # head+body silhouette, not the NPC's actual skin/face - see NpcIconFactory)
+  # instead of a plain square, IF this Pl3xMap version supports icon markers
+  # (detected automatically via reflection - see the README "What's new in
+  # 1.15"). Falls back to the square automatically if icon markers aren't
+  # available, so this is safe to leave on either way.
+  icon-mode: true
   stationary:
     border:
       enabled: true

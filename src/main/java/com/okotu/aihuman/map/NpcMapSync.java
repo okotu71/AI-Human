@@ -7,13 +7,17 @@ import net.citizensnpcs.api.npc.NPC;
 import org.bukkit.Location;
 import org.bukkit.World;
 
+import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 
 /**
- * Periodically draws every AI-enabled Citizens NPC as a small square on a
- * dedicated Pl3xMap layer ("AI NPCs") - mirrors mc-safeguard's
+ * Periodically draws every AI-enabled Citizens NPC on a dedicated Pl3xMap
+ * layer ("AI NPCs") - as a small "person" icon if {@link Pl3xMapIntegration}
+ * managed to resolve icon-marker support on this Pl3xMap install, falling
+ * back automatically to the confirmed-working small square otherwise (see
+ * {@code Pl3xMapIntegration#upsertIcon}). Mirrors mc-safeguard's
  * ClaimSyncService/ZoneMapSync, simplified since NPC counts are typically
  * small enough to just re-upsert every enabled NPC each cycle on the main
  * thread, without needing an async diff-by-content-hash step.
@@ -30,6 +34,7 @@ public class NpcMapSync implements Runnable {
 
     private static final String LAYER_KEY = "okotu-npc-ai";
     private static final String LAYER_LABEL = "AI NPCs";
+    private static final int ICON_SIZE = 24;
 
     private final AiHumanPlugin plugin;
     private final Pl3xMapIntegration mapIntegration;
@@ -37,6 +42,9 @@ public class NpcMapSync implements Runnable {
 
     /** npcId -> world it was last drawn in, so a marker can be removed even after the NPC itself is gone. */
     private final Map<Integer, String> lastDrawnWorldByNpcId = new HashMap<>();
+
+    /** Generated once per variant and re-registered idempotently (Pl3xMapIntegration#registerIcon no-ops after the first). */
+    private final Map<Boolean, BufferedImage> iconByVariant = new HashMap<>();
 
     public NpcMapSync(AiHumanPlugin plugin, Pl3xMapIntegration mapIntegration, NpcMapStyle style) {
         this.plugin = plugin;
@@ -50,6 +58,8 @@ public class NpcMapSync implements Runnable {
         if (!config.pl3xMapEnabled || !config.npcMapEnabled || !mapIntegration.isPresent()) {
             return;
         }
+
+        boolean iconMode = config.npcMapIconMode && mapIntegration.isIconModeAvailable();
 
         Map<Integer, String> currentWorldByNpcId = new HashMap<>();
         double half = config.npcMapMarkerSize / 2.0;
@@ -73,8 +83,17 @@ public class NpcMapSync implements Runnable {
             String markerId = markerId(npc.getId());
 
             try {
-                boolean drawn = mapIntegration.upsertRectangle(LAYER_KEY, LAYER_LABEL, world.getName(), markerId,
-                        loc.getX() - half, loc.getZ() - half, loc.getX() + half, loc.getZ() + half, markerStyle);
+                boolean drawn = false;
+                if (iconMode) {
+                    String iconKey = iconKeyFor(autonomous);
+                    mapIntegration.registerIcon(iconKey, iconFor(autonomous));
+                    drawn = mapIntegration.upsertIcon(LAYER_KEY, LAYER_LABEL, world.getName(), markerId,
+                            loc.getX(), loc.getZ(), iconKey, markerStyle);
+                }
+                if (!drawn) {
+                    drawn = mapIntegration.upsertRectangle(LAYER_KEY, LAYER_LABEL, world.getName(), markerId,
+                            loc.getX() - half, loc.getZ() - half, loc.getX() + half, loc.getZ() + half, markerStyle);
+                }
                 if (drawn) {
                     currentWorldByNpcId.put(npc.getId(), world.getName());
                 }
@@ -92,6 +111,15 @@ public class NpcMapSync implements Runnable {
 
         lastDrawnWorldByNpcId.clear();
         lastDrawnWorldByNpcId.putAll(currentWorldByNpcId);
+    }
+
+    private BufferedImage iconFor(boolean autonomous) {
+        return iconByVariant.computeIfAbsent(autonomous,
+                key -> NpcIconFactory.personIcon(style.iconColor(key), ICON_SIZE));
+    }
+
+    private String iconKeyFor(boolean autonomous) {
+        return autonomous ? "aihuman-npc-autonomous" : "aihuman-npc-stationary";
     }
 
     private String markerId(int npcId) {

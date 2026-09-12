@@ -45,6 +45,13 @@ public class NpcMapStyle {
         );
     }
 
+    /** Raw fill color for a variant, used to tint the generated icon (see NpcIconFactory). */
+    public Color iconColor(boolean autonomous) {
+        var config = plugin.getConfig();
+        String prefix = autonomous ? "npc-map.autonomous" : "npc-map.stationary";
+        return parseColor(config.getString(prefix + ".fill.color", "#3388FF"));
+    }
+
     private String tooltipHtml(String displayName, boolean autonomous) {
         StringBuilder sb = new StringBuilder();
         sb.append(escape(displayName)).append("<br>");

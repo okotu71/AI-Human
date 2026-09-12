@@ -385,6 +385,19 @@ public class AiHumanCommand implements CommandExecutor {
             sender.sendMessage(ChatColor.RED + "minDistance can't be greater than maxDistance.");
             return;
         }
+        if (minDistance > radius) {
+            sender.sendMessage(ChatColor.RED + "minDistance (" + minDistance + ") is greater than radius ("
+                    + radius + ") - every hop would be guaranteed to land outside the roam boundary and get "
+                    + "rejected, so the NPC would never move at all. radius must be >= maxDistance. "
+                    + "Example: for a wide 2000-block roam area with 200-500 block hops, use "
+                    + "/aihuman wander " + npcId + " 2000 200 500 (radius first, then min, then max).");
+            return;
+        }
+        if (maxDistance > radius) {
+            sender.sendMessage(ChatColor.YELLOW + "Note: maxDistance (" + maxDistance + ") is greater than radius ("
+                    + radius + ") - hops will be capped at " + radius + " blocks in practice, maxDistance won't "
+                    + "be fully used. Set radius >= maxDistance if you want the full range to apply.");
+        }
         if (!plugin.getAutonomousNpcRegistry().isAutonomous(npcId)) {
             sender.sendMessage(ChatColor.RED + "NPC " + npcId + " isn't autonomous yet - run "
                     + "/aihuman autonomous " + npcId + " on first.");

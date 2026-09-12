@@ -24,6 +24,16 @@ public class NpcMovementController {
      * only returns it if {@link NpcWorldSafety} accepts it - retrying up to
      * {@code destinationAttempts} times. Empty if nothing safe was found
      * this cycle (the caller should just try again next interval).
+     *
+     * <p>{@code wanderMinDistance}/{@code wanderMaxDistance} are clamped to
+     * {@code wanderRadius} before picking: if an admin sets, say, radius=200
+     * with minDistance=500, every single candidate would otherwise be
+     * guaranteed to land outside the radius and get rejected - a
+     * configuration that looks "on" but makes the NPC never move at all,
+     * forever, with nothing in the logs to explain why. Clamping means the
+     * NPC always has a chance to find a valid destination; {@code /aihuman wander}
+     * separately warns when it sees a combination like this, since it's
+     * almost always a mistake (radius should be &gt;= maxDistance).
      */
     public Optional<Location> pickDestination(Location home, NpcBehaviorSettings settings) {
         World world = home.getWorld();
@@ -32,17 +42,15 @@ public class NpcMovementController {
         }
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        int span = Math.max(1, settings.wanderMaxDistance() - settings.wanderMinDistance());
+        double effectiveMax = Math.min(settings.wanderMaxDistance(), settings.wanderRadius());
+        double effectiveMin = Math.min(settings.wanderMinDistance(), effectiveMax);
+        double span = Math.max(1, effectiveMax - effectiveMin);
 
         for (int attempt = 0; attempt < settings.destinationAttempts(); attempt++) {
             double angle = random.nextDouble() * Math.PI * 2;
-            double distance = settings.wanderMinDistance() + random.nextDouble() * span;
+            double distance = effectiveMin + random.nextDouble() * span;
             double x = home.getX() + Math.cos(angle) * distance;
             double z = home.getZ() + Math.sin(angle) * distance;
-
-            if (Math.hypot(x - home.getX(), z - home.getZ()) > settings.wanderRadius()) {
-                continue; // outside the overall roam boundary, try another angle/distance
-            }
 
             int blockX = (int) Math.floor(x);
             int blockZ = (int) Math.floor(z);

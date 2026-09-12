@@ -34,9 +34,16 @@ import java.util.logging.Logger;
  * mismatch on a different Pl3xMap version is diagnosable from the console
  * alone rather than requiring a code change to even find out why.
  *
- * <p>Every shape this draws is an axis-aligned rectangle, drawn via the
- * confirmed-live {@code Marker.rectangle(String key, double minX, double
- * minZ, double maxX, double maxZ)} - no Point/Polyline/array plumbing.
+ * <p>Every polygon shape this draws is an axis-aligned rectangle, drawn via
+ * the confirmed-live {@code Marker.rectangle(String, double, double, double,
+ * double)} - no Point/Polyline/array plumbing. As of 1.15, {@link #upsertIcon}
+ * additionally attempts small image-based markers (so an NPC can look like a
+ * little person/pin instead of a square) via {@code Marker.icon(String,
+ * Point, String)} - this is best-effort and NOT confirmed against a real
+ * Pl3xMap install the way the rectangle path is: if any part of it fails to
+ * resolve, icon mode simply turns itself off for the session and every
+ * caller falls back to the confirmed rectangle path, so a wrong guess here
+ * can never break the working parts of this bridge.
  */
 public class Pl3xMapIntegration {
 
@@ -45,6 +52,7 @@ public class Pl3xMapIntegration {
     private static final String LAYER_CLASS = "net.pl3x.map.core.markers.layer.Layer";
     private static final String MARKER_CLASS = "net.pl3x.map.core.markers.marker.Marker";
     private static final String OPTIONS_CLASS = "net.pl3x.map.core.markers.option.Options";
+    private static final String POINT_CLASS = "net.pl3x.map.core.markers.Point";
 
     private final Logger logger;
     private final boolean debug;
@@ -53,11 +61,14 @@ public class Pl3xMapIntegration {
 
     /** Keyed by "<layerKey>|<world>" -> the live Pl3xMap layer object. */
     private final Map<String, Object> layersByKeyAndWorld = new ConcurrentHashMap<>();
+    private final java.util.Set<String> registeredIcons = ConcurrentHashMap.newKeySet();
 
     private volatile boolean broken = false;
     private volatile boolean initLogged = false;
     private volatile boolean addMarkerFailureLogged = false;
     private volatile boolean optionsBuilderDumped = false;
+    private volatile boolean iconResolutionAttempted = false;
+    private volatile boolean iconModeAvailable = false;
 
     // Resolved once, lazily, on first real use.
     private Object api;
@@ -73,6 +84,14 @@ public class Pl3xMapIntegration {
     private Method optionsBuilderMethod;
     private Method optionsBuildMethod;
     private Constructor<?> simpleLayerConstructor;
+
+    // Icon-mode extras (best-effort, see ensureIconResolved) - failures here
+    // never call markBroken(): rectangle mode must keep working regardless.
+    private Class<?> pointClass;
+    private Method pointOfMethod;
+    private Method markerIconMethod;
+    private Object iconRegistry;
+    private Method iconRegistryRegisterMethod;
 
     public Pl3xMapIntegration(Logger logger, boolean debug, String logPrefix) {
         this.logger = logger;
@@ -152,6 +171,73 @@ public class Pl3xMapIntegration {
         }
     }
 
+    /**
+     * Whether icon markers (a small image instead of a rectangle) are usable
+     * on this Pl3xMap install. Best-effort and separate from the core
+     * rectangle path: if this returns false (or {@link #upsertIcon} fails at
+     * runtime), callers should fall back to {@link #upsertRectangle} - that
+     * path stays unaffected either way.
+     */
+    public boolean isIconModeAvailable() {
+        return isPresent() && ensureIconResolved();
+    }
+
+    /** Registers an icon image under {@code key} if not already registered. Safe to call every cycle. */
+    public void registerIcon(String key, java.awt.image.BufferedImage image) {
+        if (!ensureIconResolved() || registeredIcons.contains(key)) {
+            return;
+        }
+        try {
+            iconRegistryRegisterMethod.invoke(iconRegistry, key, image);
+            registeredIcons.add(key);
+            if (debug) {
+                logger.info(logPrefix + " Registered icon '" + key + "' with Pl3xMap.");
+            }
+        } catch (Throwable t) {
+            if (debug) {
+                logger.warning(logPrefix + " Failed to register icon '" + key + "': " + t);
+            }
+        }
+    }
+
+    /**
+     * Draws or moves an icon marker at a single point (unlike
+     * {@link #upsertRectangle}, no bounding box - just a location).
+     *
+     * @return true if the marker was actually added to a Pl3xMap layer;
+     *         false means the caller should fall back to
+     *         {@link #upsertRectangle} for this NPC this cycle.
+     */
+    public boolean upsertIcon(String layerKey, String layerLabel, String world, String markerId,
+                               double x, double z, String iconKey, PolygonStyle style) {
+        if (!isIconModeAvailable()) {
+            return false;
+        }
+        try {
+            Object layer = layerFor(layerKey, layerLabel, world);
+            if (layer == null) {
+                return false;
+            }
+
+            Object point = pointOfMethod.invoke(null, x, z);
+            Object marker = markerIconMethod.invoke(null, markerId, point, iconKey);
+            Object options = buildOptions(style);
+            if (options != null) {
+                tryInvoke(markerSetOptionsMethod, marker, options);
+            }
+            return addMarker(layer, marker, markerId);
+        } catch (Throwable t) {
+            // Deliberately does NOT call markBroken(): rectangle mode is confirmed
+            // working and must keep working even if icon mode hits a snag.
+            if (debug) {
+                logger.warning(logPrefix + " Failed to draw icon marker " + markerId
+                        + " (falling back to rectangle for this NPC): " + t);
+            }
+            iconModeAvailable = false;
+            return false;
+        }
+    }
+
     // ---- one-time reflective resolution -------------------------------
 
     private boolean ensureResolved() {
@@ -215,6 +301,73 @@ public class Pl3xMapIntegration {
             return true;
         } catch (Throwable t) {
             markBroken("resolve the Pl3xMap addon API", t);
+            return false;
+        }
+    }
+
+    /**
+     * Best-effort resolution of icon-marker support, attempted once, lazily,
+     * after {@link #ensureResolved()} has already succeeded. Never marks the
+     * whole integration broken on failure - only disables icon mode, leaving
+     * the confirmed-working rectangle path untouched. With
+     * {@code npc-map.debug: true}, a failure here dumps the real methods of
+     * whatever class didn't match, the same way every other lookup does.
+     */
+    private boolean ensureIconResolved() {
+        if (iconResolutionAttempted) {
+            return iconModeAvailable;
+        }
+        iconResolutionAttempted = true;
+        if (!ensureResolved()) {
+            return false;
+        }
+
+        try {
+            Class<?> resolvedPointClass = Class.forName(POINT_CLASS);
+            Method pointOf = findExactMethod(resolvedPointClass, "of", double.class, double.class);
+            if (pointOf == null) {
+                if (debug) dumpPublicMethods("Point (static)", resolvedPointClass);
+                logger.info(logPrefix + " Icon markers unavailable (no Point.of(double,double) found) - "
+                        + "using rectangle markers instead.");
+                return false;
+            }
+
+            Method iconMethod = findExactMethod(markerClass, "icon", String.class, resolvedPointClass, String.class);
+            if (iconMethod == null) {
+                if (debug) dumpPublicMethods("Marker (static, icon lookup)", markerClass);
+                logger.info(logPrefix + " Icon markers unavailable (no Marker.icon(String,Point,String) found) - "
+                        + "using rectangle markers instead.");
+                return false;
+            }
+
+            Method getIconRegistry = findMethod(api.getClass(), "getIconRegistry");
+            if (getIconRegistry == null) {
+                if (debug) dumpPublicMethods("Pl3xMap API instance (icon lookup)", api.getClass());
+                logger.info(logPrefix + " Icon markers unavailable (no getIconRegistry() found) - "
+                        + "using rectangle markers instead.");
+                return false;
+            }
+            Object registry = getIconRegistry.invoke(api);
+            Method register = findMethod(registry.getClass(), "register",
+                    String.class, java.awt.image.BufferedImage.class);
+            if (register == null) {
+                if (debug) dumpPublicMethods("IconRegistry", registry.getClass());
+                logger.info(logPrefix + " Icon markers unavailable (no IconRegistry#register(String,BufferedImage) "
+                        + "found) - using rectangle markers instead.");
+                return false;
+            }
+
+            this.pointClass = resolvedPointClass;
+            this.pointOfMethod = pointOf;
+            this.markerIconMethod = iconMethod;
+            this.iconRegistry = registry;
+            this.iconRegistryRegisterMethod = register;
+            this.iconModeAvailable = true;
+            logger.info(logPrefix + " Icon markers resolved via reflection - NPCs will be drawn as icons "
+                    + "instead of rectangles.");
+            return true;
+        } catch (Throwable t) {
+            logger.info(logPrefix + " Icon markers unavailable (" + t + ") - using rectangle markers instead.");
             return false;
         }
     }
@@ -290,6 +443,16 @@ public class Pl3xMapIntegration {
                     tooltip = findMethod(builder.getClass(), "tooltip", String.class);
                 }
                 tryInvoke(tooltip, builder, style.tooltip());
+
+                // Best-effort, experimental: try to make the tooltip permanently visible
+                // (like a player nameplate) instead of hover-only. Silently ignored if this
+                // Pl3xMap version doesn't expose any of these - the hover tooltip above
+                // still works either way, so this can never make things worse.
+                Method permanentTrue = findMethod(builder.getClass(), "tooltipPermanent", boolean.class);
+                if (permanentTrue == null) {
+                    permanentTrue = findMethod(builder.getClass(), "permanentTooltip", boolean.class);
+                }
+                tryInvoke(permanentTrue, builder, true);
             }
 
             return optionsBuildMethod.invoke(builder);
