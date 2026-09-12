@@ -22,9 +22,36 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`ai-human-1.15.jar`. `plugin.yml`'s `version:` field is filled in
+`ai-human-1.16.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.16
+
+Feedback from an actual running server (screenshots): the permanent
+tooltip added in 1.15 worked - it rendered as a white box with "mefisto" /
+"Autonomous NPC" - but the styling didn't look like a player nameplate the
+way it was meant to. Two fixes, both purely in `NpcMapStyle`'s tooltip HTML
+- no new Pl3xMap API calls, so neither carries the "might not resolve on
+this version" risk the icon-marker/permanent-tooltip attempts themselves do:
+
+- **Name only** - dropped the "Autonomous NPC"/"AI NPC" suffix.
+- **Dark nameplate + hearts**, styled to look like a real Minecraft player
+  label: a semi-transparent black rounded background (inline CSS inside the
+  tooltip's own HTML, using negative margins to bleed over Leaflet's
+  default white tooltip padding) with the name on top and a row of 10 heart
+  glyphs underneath - red for filled, gray for empty, reflecting the NPC's
+  actual current/max health if its entity is a `LivingEntity` (defaults to
+  a full bar otherwise, which covers most dialogue NPCs since they're
+  usually set invulnerable).
+
+**This part is a CSS approximation, not a confirmed-exact match**: the
+negative-margin trick assumes a specific default padding for Leaflet
+tooltips that can vary slightly by Pl3xMap version/theme - if you still see
+a thin white sliver at the edges of the label after upgrading, that's a
+padding-value tuning problem in `NpcMapStyle.tooltipHtml`, not a broken
+integration; screenshot it and the margin/padding numbers can be adjusted
+to match exactly what your install renders.
 
 ## What's new in 1.15
 
@@ -102,7 +129,7 @@ that identifies the plugin changed; nothing about how it works did.
 - Permissions: `okotu.npcai.admin` / `okotu.npcai.talk` →
   `aihuman.admin` / `aihuman.talk`
 - Maven artifact: `okotu-npc-ai-engine` → `ai-human` (jar is now
-  `ai-human-1.15.jar`)
+  `ai-human-1.16.jar`)
 - Java package: `com.okotu.npcai` → `com.okotu.aihuman` (kept `okotu` -
   that's your author namespace, not part of the old plugin name)
 - Main class `OkotuNpcAiPlugin` → `AiHumanPlugin`, command handler
@@ -780,7 +807,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/ai-human-1.15.jar | grep plugin.yml` after
+  `unzip -l target/ai-human-1.16.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

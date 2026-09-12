@@ -79,7 +79,7 @@ public class NpcMapSync implements Runnable {
             }
 
             boolean autonomous = plugin.getAutonomousNpcRegistry().isAutonomous(npc.getId());
-            Pl3xMapIntegration.PolygonStyle markerStyle = style.forNpc(npc.getName(), autonomous);
+            Pl3xMapIntegration.PolygonStyle markerStyle = style.forNpc(npc, autonomous);
             String markerId = markerId(npc.getId());
 
             try {

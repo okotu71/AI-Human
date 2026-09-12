@@ -6,7 +6,7 @@
 
     <groupId>com.okotu</groupId>
     <artifactId>ai-human</artifactId>
-    <version>1.15</version>
+    <version>1.16</version>
     <packaging>jar</packaging>
 
     <properties>

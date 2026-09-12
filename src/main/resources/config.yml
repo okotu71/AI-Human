@@ -359,6 +359,9 @@ npc-map:
       enabled: true
       opacity: 0.5
       color: "#33CC33"
+  # Since 1.16: styled like a Minecraft player nameplate (dark rounded label,
+  # name only, a row of hearts underneath reflecting the NPC's actual
+  # health if it's damageable) instead of Pl3xMap's plain white tooltip box.
   tooltip:
     enabled: true
 
