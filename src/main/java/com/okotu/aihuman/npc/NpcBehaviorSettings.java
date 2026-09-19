@@ -23,7 +23,12 @@ public record NpcBehaviorSettings(
         int maxWaterDepth,
         int destinationAttempts,
         double approachStopDistance,
-        double walkSpeed
+        double walkSpeed,
+        int maxElevationChange,
+        boolean preferPaths,
+        int pathSearchRadius,
+        long stuckTimeoutMs,
+        double stuckMinProgressDistance
 ) {
 
     public static NpcBehaviorSettings resolve(PluginConfig config, NpcBehaviorConfig override) {
@@ -43,7 +48,12 @@ public record NpcBehaviorSettings(
                 config.autonomousMaxWaterDepth,
                 config.autonomousDestinationAttempts,
                 config.autonomousApproachStopDistance,
-                config.autonomousWalkSpeed
+                config.autonomousWalkSpeed,
+                config.autonomousMaxElevationChange,
+                config.autonomousPreferPaths,
+                config.autonomousPathSearchRadius,
+                config.autonomousStuckTimeoutMs,
+                config.autonomousStuckMinProgressDistance
         );
     }
 }

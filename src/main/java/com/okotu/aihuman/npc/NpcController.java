@@ -1,5 +1,7 @@
 package com.okotu.aihuman.npc;
 
+import org.bukkit.Location;
+
 import java.util.UUID;
 
 /**
@@ -14,6 +16,15 @@ public class NpcController {
     private final int npcId;
     private NpcActivityState state = NpcActivityState.WANDERING;
     private UUID targetPlayerUuid;
+
+    // Stuck detection (1.17+): last position where the NPC was seen making
+    // real progress while "navigating", and when. See NpcBehaviorManager.
+    private Location lastProgressPosition;
+    private long lastProgressAtMillis = System.currentTimeMillis();
+
+    // TRAVEL behavior (1.17+): which waypoint in npc_travel_waypoints (in
+    // sequence order) this NPC is currently heading to.
+    private int waypointIndex = 0;
 
     public NpcController(int npcId) {
         this.npcId = npcId;
@@ -37,5 +48,29 @@ public class NpcController {
 
     public void setTargetPlayerUuid(UUID targetPlayerUuid) {
         this.targetPlayerUuid = targetPlayerUuid;
+    }
+
+    public Location lastProgressPosition() {
+        return lastProgressPosition;
+    }
+
+    public void setLastProgressPosition(Location lastProgressPosition) {
+        this.lastProgressPosition = lastProgressPosition;
+    }
+
+    public long lastProgressAtMillis() {
+        return lastProgressAtMillis;
+    }
+
+    public void setLastProgressAtMillis(long lastProgressAtMillis) {
+        this.lastProgressAtMillis = lastProgressAtMillis;
+    }
+
+    public int waypointIndex() {
+        return waypointIndex;
+    }
+
+    public void setWaypointIndex(int waypointIndex) {
+        this.waypointIndex = waypointIndex;
     }
 }

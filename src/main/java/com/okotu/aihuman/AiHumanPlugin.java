@@ -14,6 +14,7 @@ import com.okotu.aihuman.db.KnowledgeDao;
 import com.okotu.aihuman.db.NpcBehaviorDao;
 import com.okotu.aihuman.db.NpcProfileDao;
 import com.okotu.aihuman.db.NpcStateDao;
+import com.okotu.aihuman.db.NpcWaypointDao;
 import com.okotu.aihuman.db.PlayerMemoryDao;
 import com.okotu.aihuman.db.VillageEventDao;
 import com.okotu.aihuman.dialog.NpcDialogRenderer;
@@ -25,6 +26,7 @@ import com.okotu.aihuman.npc.ConversationSessionManager;
 import com.okotu.aihuman.npc.EnabledNpcRegistry;
 import com.okotu.aihuman.npc.NpcBehaviorManager;
 import com.okotu.aihuman.npc.NpcBridgeListener;
+import com.okotu.aihuman.npc.NpcWaypointRegistry;
 import com.okotu.aihuman.npc.ProximityGreetingTask;
 import com.okotu.aihuman.service.ConversationService;
 import com.okotu.aihuman.service.RandomProfileGenerator;
@@ -54,6 +56,7 @@ public class AiHumanPlugin extends JavaPlugin {
     private KnowledgeDao knowledgeDao;
     private NpcStateDao npcStateDao;
     private NpcBehaviorDao npcBehaviorDao;
+    private NpcWaypointDao npcWaypointDao;
 
     private RecentMessageCache recentMessageCache;
     private OllamaClient ollamaClient;
@@ -64,6 +67,7 @@ public class AiHumanPlugin extends JavaPlugin {
     private ConversationSessionManager conversationSessionManager;
     private EnabledNpcRegistry enabledNpcRegistry;
     private AutonomousNpcRegistry autonomousNpcRegistry;
+    private NpcWaypointRegistry npcWaypointRegistry;
     private NpcDialogRenderer npcDialogRenderer;
     private Pl3xMapIntegration pl3xMapIntegration;
     private NpcMapStyle npcMapStyle;
@@ -107,6 +111,14 @@ public class AiHumanPlugin extends JavaPlugin {
                     "Could not load the list of autonomous NPCs - starting with none autonomous. "
                             + "Re-run /aihuman autonomous <npcId> on for any NPC that should be wandering, "
                             + "or fix the underlying database issue and restart.", e);
+        }
+
+        try {
+            npcWaypointRegistry.loadInitialState();
+        } catch (SQLException e) {
+            getLogger().log(Level.SEVERE,
+                    "Could not load TRAVEL waypoints - TRAVEL-behavior NPCs will stay put until this is fixed "
+                            + "and the server restarted (or /aihuman travel add is used again).", e);
         }
 
         if (pluginConfig.pl3xMapEnabled && Bukkit.getPluginManager().getPlugin("Pl3xMap") == null) {
@@ -183,6 +195,7 @@ public class AiHumanPlugin extends JavaPlugin {
         this.knowledgeDao = new KnowledgeDao(database);
         this.npcStateDao = new NpcStateDao(database);
         this.npcBehaviorDao = new NpcBehaviorDao(database);
+        this.npcWaypointDao = new NpcWaypointDao(database);
 
         this.recentMessageCache = new RecentMessageCache(dialogHistoryDao, pluginConfig);
         this.ollamaClient = new OllamaClient(pluginConfig, getLogger(), asyncExecutor);
@@ -199,6 +212,7 @@ public class AiHumanPlugin extends JavaPlugin {
         this.conversationSessionManager = new ConversationSessionManager(pluginConfig.chatCaptureTimeoutMs);
         this.enabledNpcRegistry = new EnabledNpcRegistry(npcProfileDao);
         this.autonomousNpcRegistry = new AutonomousNpcRegistry(npcBehaviorDao);
+        this.npcWaypointRegistry = new NpcWaypointRegistry(npcWaypointDao);
         this.npcDialogRenderer = new NpcDialogRenderer(this, pluginConfig);
         this.pl3xMapIntegration = new Pl3xMapIntegration(getLogger(), pluginConfig.npcMapDebug, "[AI-Human]");
         this.npcMapStyle = new NpcMapStyle(this);
@@ -302,8 +316,16 @@ public class AiHumanPlugin extends JavaPlugin {
         return npcBehaviorDao;
     }
 
+    public NpcWaypointDao getNpcWaypointDao() {
+        return npcWaypointDao;
+    }
+
     public AutonomousNpcRegistry getAutonomousNpcRegistry() {
         return autonomousNpcRegistry;
+    }
+
+    public NpcWaypointRegistry getNpcWaypointRegistry() {
+        return npcWaypointRegistry;
     }
 
     public NpcDialogRenderer getNpcDialogRenderer() {

@@ -116,6 +116,21 @@ CREATE TABLE IF NOT EXISTS npc_behavior_config (
         REFERENCES npc_profiles (npc_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS npc_travel_waypoints (
+    id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    npc_id     INT UNSIGNED NOT NULL,
+    sequence   INT UNSIGNED NOT NULL,
+    world      VARCHAR(64)  NOT NULL,
+    x          DOUBLE       NOT NULL,
+    y          DOUBLE       NOT NULL,
+    z          DOUBLE       NOT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_npc_sequence (npc_id, sequence),
+    CONSTRAINT fk_waypoint_npc FOREIGN KEY (npc_id)
+        REFERENCES npc_profiles (npc_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Example dedicated user (adjust host/password, then match config.yml "test" block):
 -- CREATE USER 'usr'@'%' IDENTIFIED BY 'psw';
 -- GRANT ALL PRIVILEGES ON okotu_npc_ai_test.* TO 'usr'@'%';

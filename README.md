@@ -22,9 +22,73 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`ai-human-1.16.jar`. `plugin.yml`'s `version:` field is filled in
+`ai-human-1.17.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.17
+
+### Bug fix: autonomous NPCs climbing mountains and getting permanently stuck
+
+Two related problems, both in how a wander destination was chosen and how
+"still navigating" was trusted:
+
+- **No elevation awareness.** `NpcMovementController` picked a random point
+  purely by horizontal distance from home, with no regard for how much
+  higher or lower its ground level was - so it could just as easily send an
+  NPC up a mountainside as across flat ground. New
+  `interaction.autonomous.max-elevation-change` (default 20 blocks) rejects
+  a candidate whose ground elevation differs from home's by more than that,
+  without needing real terrain-following pathfinding.
+- **Citizens' Navigator doesn't always notice when it's stuck.** Once a
+  destination was picked, the NPC only got a new one when
+  `Navigator#isNavigating()` returned false - but that flag can stay `true`
+  indefinitely even when the entity has stopped making any real progress
+  (wedged against terrain, an unreachable point, etc.), which is exactly
+  what "stops in a weird spot and never restarts" looks like. This plugin
+  now tracks its own progress: if an NPC hasn't moved at least
+  `stuck-min-progress-distance` blocks (default 2.0) within
+  `stuck-timeout-seconds` (default 15) while "navigating", its path is
+  cancelled and a new destination is picked immediately - the NPC keeps
+  moving continuously instead of ever standing still indefinitely.
+- **New: `interaction.autonomous.prefer-paths`** (default `true`). Once a
+  safe destination is found, nudges it onto a nearby vanilla path block
+  (the "dirt path" block used by villages and shovels) within
+  `path-search-radius` (default 6) blocks, if one is that close - NPCs then
+  tend to walk along paths/roads when one happens to be nearby, instead of
+  always cutting straight across open terrain. This only recognizes the
+  vanilla path block, not arbitrary player-built roads (no reliable way to
+  tell a road from a floor from block type alone) - it's a nudge, not a
+  requirement, so wandering still works fine wherever no path exists.
+
+### Real TRAVEL behavior (not just WANDER-in-disguise anymore)
+
+`/aihuman behavior <npcId> TRAVEL` now actually does something different
+instead of quietly behaving like WANDER:
+
+- New `npc_travel_waypoints` table: an ordered list of points per NPC. A
+  TRAVEL NPC walks to each in sequence, looping back to the first after the
+  last - patrol/merchant-route style movement instead of random wandering.
+- `/aihuman travel <npcId> add` - adds a waypoint at your current in-game
+  position (or `/aihuman travel <npcId> add <world> <x> <y> <z>` for
+  explicit coordinates, which also works from console).
+- `/aihuman travel <npcId> list` - shows the configured route in order.
+- `/aihuman travel <npcId> clear` - removes every waypoint.
+- A TRAVEL NPC with zero waypoints simply stands still - it does **not**
+  silently fall back to random wandering, since that would quietly ignore
+  what you asked for. `/aihuman behavior` reminds you of this when you set
+  TRAVEL on an NPC that has none configured yet.
+- VILLAGE/GUARD/FOLLOW remain accepted-but-not-implemented (still behave
+  like WANDER) - only WANDER and TRAVEL are real as of this version.
+
+### Config text updated
+
+`conversation.summary-prompt` and `fallback.messages` replaced with the
+in-character/in-universe versions - the summarizer is now explicitly
+instructed to write summaries as an in-world historical log (no game
+mechanics, no "AI"/"NPC" language) and to never break character even when
+asked directly about its nature; the fallback lines are rewritten in first
+person to match.
 
 ## What's new in 1.16
 
@@ -129,7 +193,7 @@ that identifies the plugin changed; nothing about how it works did.
 - Permissions: `okotu.npcai.admin` / `okotu.npcai.talk` →
   `aihuman.admin` / `aihuman.talk`
 - Maven artifact: `okotu-npc-ai-engine` → `ai-human` (jar is now
-  `ai-human-1.16.jar`)
+  `ai-human-1.17.jar`)
 - Java package: `com.okotu.npcai` → `com.okotu.aihuman` (kept `okotu` -
   that's your author namespace, not part of the old plugin name)
 - Main class `OkotuNpcAiPlugin` → `AiHumanPlugin`, command handler
@@ -807,7 +871,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/ai-human-1.16.jar | grep plugin.yml` after
+  `unzip -l target/ai-human-1.17.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

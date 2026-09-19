@@ -156,6 +156,28 @@ CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_behavior_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------
+-- 8) npc_travel_waypoints - ordered stops for TRAVEL-behavior NPCs (1.17+)
+-- ---------------------------------------------------------
+-- Only meaningful when npc_behavior_config.behavior_type = 'TRAVEL'. An NPC
+-- with no rows here and TRAVEL selected simply doesn't move (see
+-- /aihuman travel add) - it does NOT fall back to random wandering, since
+-- that would silently ignore what the admin asked for.
+CREATE TABLE IF NOT EXISTS {{PREFIX}}npc_travel_waypoints (
+    id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    npc_id     INT UNSIGNED NOT NULL,
+    sequence   INT UNSIGNED NOT NULL,   -- visit order; NPC loops back to the lowest after the highest
+    world      VARCHAR(64)  NOT NULL,
+    x          DOUBLE       NOT NULL,
+    y          DOUBLE       NOT NULL,
+    z          DOUBLE       NOT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_npc_sequence (npc_id, sequence),
+    CONSTRAINT {{PREFIX}}fk_waypoint_npc FOREIGN KEY (npc_id)
+        REFERENCES {{PREFIX}}npc_profiles (npc_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------
 -- Reference queries (documentation only, not executed automatically)
 -- ---------------------------------------------------------
 -- Safety cap on npc_dialog_history in case SummaryService ever fails to

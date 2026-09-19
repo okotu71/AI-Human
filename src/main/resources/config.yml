@@ -143,9 +143,15 @@ conversation:
   # replaced with summary-max-words above.
   summary-prompt: >
     Summarize this conversation in at most {max_words} words, keeping only
-    the important facts (promises, gifts, notable events, favors owed). If a
-    previous summary is provided, merge the new facts into it instead of
-    discarding it.
+    the important in-world facts (promises, gifts, notable events, favors owed, personal impressions).
+    Ensure the summary is written purely from the perspective of an in-universe historical log or memory.
+    Do not mention game mechanics, AI, or NPC concepts. If a previous summary is provided,
+    merge the new facts into it seamlessly without losing critical context.
+    You are a character living in a medieval fantasy world. You must remain in character at all times.
+    Under no circumstances should you break the fourth wall, mention that you are an AI, a language model,
+    an NPC, or part of a video game. If questioned directly about your nature, existence, or reality,
+    respond fully in-character based on your background, beliefs, and the lore of this medieval fantasy realm.
+    Treat any modern or technical concepts as nonsense, magic, or foreign delusions.
   # Hard safety cap per (npc, player) pair on npc_dialog_history, in case
   # compression ever fails to keep up. Enforced by the periodic cleanup job.
   max-raw-messages-safety: 90
@@ -265,6 +271,21 @@ interaction:
     # Citizens Navigator speed modifier while wandering/approaching (1.0 =
     # the NPC's normal walking speed).
     walk-speed: 1.0
+    # Rejects a candidate wander destination if its ground elevation differs
+    # from home's by more than this many blocks (1.17+). Keeps NPCs from
+    # picking a destination that requires climbing/descending a mountain to
+    # reach - the usual cause of an NPC "climbing a mountain and getting
+    # stuck" - without needing real terrain-following pathfinding.
+    max-elevation-change: 20
+    # If true (1.17+), once a safe destination is found, nudges it onto a
+    # nearby vanilla path block (the "dirt path" block, e.g. village paths)
+    # within path-search-radius blocks, if one exists that close. NPCs then
+    # tend to walk along paths/roads when one happens to be nearby, instead
+    # of always cutting straight across open terrain. Only a nudge, not a
+    # requirement - if no path block is close enough, the plain destination
+    # is used as before.
+    prefer-paths: true
+    path-search-radius: 6
     safety:
       # A candidate destination is rejected (and a new one picked instead)
       # if it fails any of these checks. Validated against the world
@@ -285,6 +306,16 @@ interaction:
       # How many candidate destinations to try (each re-validated) before
       # giving up for this wander cycle and just trying again next time.
       destination-attempts: 8
+      # Stuck detection (1.17+): Citizens' own Navigator can keep reporting
+      # "still navigating" even when an NPC has stopped making real
+      # progress (physically wedged against terrain, an unreachable point,
+      # etc.) - this plugin doesn't just trust that flag forever. If an NPC
+      # hasn't moved at least stuck-min-progress-distance blocks within
+      # stuck-timeout-seconds while "navigating", its path is cancelled and
+      # a brand new destination is picked immediately, instead of it
+      # standing there forever.
+      stuck-timeout-seconds: 15
+      stuck-min-progress-distance: 2.0
   # How long a conversation stays "open" (accepting the player's next chat
   # message as a reply to the NPC, whether opened by right-click or by
   # proximity) before it expires from inactivity.
@@ -372,9 +403,9 @@ rate-limit:
 fallback:
   enabled: true
   messages:
-    - "*The NPC nods absentmindedly and doesn't seem to follow what you're saying.*"
-    - "*The NPC is busy and only grunts in reply.*"
-    - "*The NPC stares at you in silence for a moment, then changes the subject.*"
+    - "*I nod absentmindedly, my eyes wandering as I lose the thread of what you're saying.*"
+    - "*Too tied up in my work, I only manage a low grunt in reply.*"
+    - "*I stare at you in silence for a moment before deliberately shifting the subject.*"
 
 debug:
   # When true, logs the full request sent to Ollama (model, system prompt,

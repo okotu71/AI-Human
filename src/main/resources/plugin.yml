@@ -11,7 +11,7 @@ depend: [Citizens]
 commands:
   aihuman:
     description: Admin commands for AI-Human
-    usage: /aihuman <reload|profile|knowledge|event|relationship|state|enable|disable|autonomous|wander|behavior|version|info>
+    usage: /aihuman <reload|profile|knowledge|event|relationship|state|enable|disable|autonomous|wander|behavior|travel|version|info>
     permission: aihuman.admin
 
 permissions:

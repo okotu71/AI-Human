@@ -191,7 +191,7 @@ public class ConversationService {
     private String fallbackMessage() {
         List<String> messages = config.fallbackMessages;
         if (!config.fallbackEnabled || messages.isEmpty()) {
-            return "*The NPC doesn't answer.*";
+            return "*I don't answer.*";
         }
         return messages.get(random.nextInt(messages.size()));
     }

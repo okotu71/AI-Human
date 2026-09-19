@@ -11,6 +11,7 @@ import com.okotu.aihuman.model.NpcBehaviorConfig;
 import com.okotu.aihuman.model.NpcBehaviorType;
 import com.okotu.aihuman.model.NpcProfile;
 import com.okotu.aihuman.model.NpcState;
+import com.okotu.aihuman.model.NpcWaypoint;
 import com.okotu.aihuman.model.PlayerMemory;
 import com.okotu.aihuman.model.VillageEvent;
 import net.citizensnpcs.api.CitizensAPI;
@@ -19,9 +20,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.time.Instant;
@@ -66,6 +69,7 @@ public class AiHumanCommand implements CommandExecutor {
             case "autonomous" -> handleAutonomous(sender, args);
             case "wander" -> handleWander(sender, args);
             case "behavior" -> handleBehaviorType(sender, args);
+            case "travel" -> handleTravel(sender, args);
             case "version" -> handleVersion(sender);
             case "info" -> handleInfo(sender, args);
             default -> sendUsage(sender);
@@ -87,6 +91,7 @@ public class AiHumanCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.YELLOW + "/aihuman autonomous <npcId> on|off  (1.11+: autonomous wandering)");
         sender.sendMessage(ChatColor.YELLOW + "/aihuman wander <npcId> <radius> <minDistance> <maxDistance>");
         sender.sendMessage(ChatColor.YELLOW + "/aihuman behavior <npcId> <WANDER|VILLAGE|TRAVEL|GUARD|FOLLOW>");
+        sender.sendMessage(ChatColor.YELLOW + "/aihuman travel <npcId> add [world] [x] [y] [z] | list | clear");
         sender.sendMessage(ChatColor.YELLOW + "/aihuman version  (shows the running version and AI parameters, never SQL/MySQL settings)");
         sender.sendMessage(ChatColor.YELLOW + "/aihuman info <npcId> [player]");
     }
@@ -431,15 +436,97 @@ public class AiHumanCommand implements CommandExecutor {
                     + "/aihuman autonomous " + npcId + " on first.");
             return;
         }
-        if (type != NpcBehaviorType.WANDER) {
-            sender.sendMessage(ChatColor.YELLOW + "Note: only WANDER is actually implemented in this version - "
-                    + type + " will be saved but behave like WANDER for now.");
+        if (type != NpcBehaviorType.WANDER && type != NpcBehaviorType.TRAVEL) {
+            sender.sendMessage(ChatColor.YELLOW + "Note: only WANDER and TRAVEL are actually implemented in "
+                    + "this version - " + type + " will be saved but behave like WANDER for now.");
+        } else if (type == NpcBehaviorType.TRAVEL) {
+            sender.sendMessage(ChatColor.YELLOW + "Reminder: TRAVEL needs waypoints to do anything - see "
+                    + "/aihuman travel " + npcId + " add. With none set, this NPC will just stand still.");
         }
 
         runAsync(sender, "Error updating behavior type", () -> {
             plugin.getAutonomousNpcRegistry().updateBehaviorType(npcId, type);
             sender.sendMessage(ChatColor.GREEN + "NPC " + npcId + " behavior type set to " + type + ".");
         });
+    }
+
+    // ---------------------------------------------------------------
+    // travel (1.17+) - waypoints for TRAVEL-behavior NPCs.
+    // ---------------------------------------------------------------
+    private void handleTravel(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /aihuman travel <npcId> add [world] [x] [y] [z] | list | clear");
+            return;
+        }
+        Integer npcId = parseInt(sender, args[1]);
+        if (npcId == null) return;
+        String action = args[2].toLowerCase();
+
+        switch (action) {
+            case "add" -> handleTravelAdd(sender, args, npcId);
+            case "list" -> handleTravelList(sender, npcId);
+            case "clear" -> runAsync(sender, "Error clearing waypoints", () -> {
+                plugin.getNpcWaypointRegistry().clear(npcId);
+                sender.sendMessage(ChatColor.GREEN + "Cleared all waypoints for NPC " + npcId + ".");
+            });
+            default -> sender.sendMessage(ChatColor.RED
+                    + "Usage: /aihuman travel <npcId> add [world] [x] [y] [z] | list | clear");
+        }
+    }
+
+    private void handleTravelAdd(CommandSender sender, String[] args, int npcId) {
+        Location location;
+        if (args.length >= 7) {
+            // Explicit coordinates - works from console too.
+            World world = Bukkit.getWorld(args[3]);
+            if (world == null) {
+                sender.sendMessage(ChatColor.RED + "Unknown world '" + args[3] + "'.");
+                return;
+            }
+            Double x = parseDouble(sender, args[4]);
+            Double y = parseDouble(sender, args[5]);
+            Double z = parseDouble(sender, args[6]);
+            if (x == null || y == null || z == null) return;
+            location = new Location(world, x, y, z);
+        } else if (sender instanceof Player player) {
+            // No coordinates given - use the sender's own current position.
+            location = player.getLocation();
+        } else {
+            sender.sendMessage(ChatColor.RED
+                    + "Console needs explicit coordinates: /aihuman travel " + npcId + " add <world> <x> <y> <z>");
+            return;
+        }
+
+        Location finalLocation = location;
+        runAsync(sender, "Error adding waypoint", () -> {
+            plugin.getNpcWaypointRegistry().add(npcId, finalLocation);
+            sender.sendMessage(ChatColor.GREEN + "Waypoint added for NPC " + npcId + " at "
+                    + formatLocation(finalLocation) + ".");
+        });
+    }
+
+    private void handleTravelList(CommandSender sender, int npcId) {
+        List<NpcWaypoint> waypoints = plugin.getNpcWaypointRegistry().get(npcId);
+        if (waypoints.isEmpty()) {
+            sender.sendMessage(ChatColor.YELLOW + "NPC " + npcId + " has no waypoints yet - "
+                    + "/aihuman travel " + npcId + " add");
+            return;
+        }
+        sender.sendMessage(ChatColor.GOLD + "Waypoints for NPC " + npcId + " (" + waypoints.size()
+                + ", visited in order, looping back to the first):");
+        for (NpcWaypoint wp : waypoints) {
+            sender.sendMessage(ChatColor.GRAY + "  #" + wp.sequence() + ": " + wp.world()
+                    + String.format(" (%.0f, %.0f, %.0f)", wp.x(), wp.y(), wp.z()));
+        }
+    }
+
+    private Double parseDouble(CommandSender sender, String s) {
+        try {
+            return Double.parseDouble(s);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(ChatColor.RED + "'" + s + "' is not a valid number.");
+            return null;
+        }
     }
 
     private String formatLocation(Location loc) {

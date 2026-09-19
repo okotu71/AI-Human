@@ -3,6 +3,8 @@ package com.okotu.aihuman.npc;
 import com.okotu.aihuman.AiHumanPlugin;
 import com.okotu.aihuman.config.PluginConfig;
 import com.okotu.aihuman.model.NpcBehaviorConfig;
+import com.okotu.aihuman.model.NpcBehaviorType;
+import com.okotu.aihuman.model.NpcWaypoint;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
 import org.bukkit.Bukkit;
@@ -12,6 +14,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -85,7 +88,8 @@ public class NpcBehaviorManager implements Runnable {
 
     // ---------------------------------------------------------------
     // WANDERING: look for a player to approach; otherwise keep walking
-    // toward a randomly-chosen, safety-checked destination.
+    // toward the next destination - a random safety-checked point for
+    // WANDER behavior, or the next waypoint in sequence for TRAVEL.
     // ---------------------------------------------------------------
     private void updateWandering(NPC npc, NpcBehaviorConfig behaviorConfig, NpcController controller,
                                   NpcBehaviorSettings settings) {
@@ -105,13 +109,69 @@ public class NpcBehaviorManager implements Runnable {
             return;
         }
 
-        if (!npc.getNavigator().isNavigating()) {
-            Location home = resolveHome(behaviorConfig, npcLocation);
-            movementController.pickDestination(home, settings)
-                    .ifPresent(destination -> movementController.navigateTo(npc, destination, settings.walkSpeed()));
-            // If no safe destination was found this cycle, just do nothing - the NPC
-            // stays put and tries again next check-interval-ticks.
+        if (npc.getNavigator().isNavigating()) {
+            if (hasMadeProgress(controller, npcLocation, settings)) {
+                controller.setLastProgressPosition(npcLocation);
+                controller.setLastProgressAtMillis(System.currentTimeMillis());
+                return; // actively making progress toward its current destination - nothing to do
+            }
+            if (System.currentTimeMillis() - controller.lastProgressAtMillis() < settings.stuckTimeoutMs()) {
+                return; // navigating, no progress yet, but not stuck long enough to give up on it
+            }
+            // Stuck: Citizens' own Navigator still reports "navigating" but the NPC
+            // hasn't actually moved in stuckTimeoutMs - give up on this path and
+            // fall through below to immediately pick a fresh destination.
+            npc.getNavigator().cancelNavigation();
         }
+
+        pickNextDestination(npc, behaviorConfig, controller, settings, npcLocation).ifPresent(destination -> {
+            movementController.navigateTo(npc, destination, settings.walkSpeed());
+            controller.setLastProgressPosition(npcLocation);
+            controller.setLastProgressAtMillis(System.currentTimeMillis());
+        });
+        // If no destination was available this cycle (WANDER found nothing safe, or
+        // TRAVEL has no waypoints configured yet), the NPC just stays put and this
+        // is retried next check-interval-ticks.
+    }
+
+    private Optional<Location> pickNextDestination(NPC npc, NpcBehaviorConfig behaviorConfig,
+                                                     NpcController controller, NpcBehaviorSettings settings,
+                                                     Location npcLocation) {
+        if (behaviorConfig.behaviorType() == NpcBehaviorType.TRAVEL) {
+            return nextWaypoint(npc, controller);
+        }
+        Location home = resolveHome(behaviorConfig, npcLocation);
+        return movementController.pickDestination(home, settings);
+    }
+
+    /** Advances the NPC to the next waypoint in sequence, looping back to the first after the last. */
+    private Optional<Location> nextWaypoint(NPC npc, NpcController controller) {
+        List<NpcWaypoint> waypoints = plugin.getNpcWaypointRegistry().get(npc.getId());
+        if (waypoints.isEmpty()) {
+            return Optional.empty(); // TRAVEL selected but no waypoints yet - see /aihuman travel add
+        }
+        int index = controller.waypointIndex() % waypoints.size();
+        NpcWaypoint waypoint = waypoints.get(index);
+        World world = Bukkit.getWorld(waypoint.world());
+        if (world == null) {
+            return Optional.empty(); // that waypoint's world isn't loaded right now
+        }
+        controller.setWaypointIndex((index + 1) % waypoints.size());
+        return Optional.of(new Location(world, waypoint.x(), waypoint.y(), waypoint.z()));
+    }
+
+    /**
+     * True if the NPC has moved at least {@code stuckMinProgressDistance}
+     * since the last time progress was recorded (or if there's no baseline
+     * yet / the world changed, in which case the clock just (re)starts).
+     */
+    private boolean hasMadeProgress(NpcController controller, Location current, NpcBehaviorSettings settings) {
+        Location last = controller.lastProgressPosition();
+        if (last == null || last.getWorld() == null || !last.getWorld().equals(current.getWorld())) {
+            return true;
+        }
+        double minDistance = settings.stuckMinProgressDistance();
+        return last.distanceSquared(current) >= minDistance * minDistance;
     }
 
     // ---------------------------------------------------------------

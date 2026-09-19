@@ -93,6 +93,11 @@ public class PluginConfig {
     public final double autonomousDefaultDetectionRadius;
     public final double autonomousApproachStopDistance;
     public final double autonomousWalkSpeed;
+    public final int autonomousMaxElevationChange;
+    public final boolean autonomousPreferPaths;
+    public final int autonomousPathSearchRadius;
+    public final long autonomousStuckTimeoutMs;
+    public final double autonomousStuckMinProgressDistance;
     public final boolean autonomousAvoidLava;
     public final boolean autonomousAvoidDeepWater;
     public final boolean autonomousAvoidCliffs;
@@ -222,6 +227,13 @@ public class PluginConfig {
                 cfg.getDouble("interaction.autonomous.default-detection-radius", 15);
         this.autonomousApproachStopDistance = cfg.getDouble("interaction.autonomous.approach-stop-distance", 2.5);
         this.autonomousWalkSpeed = cfg.getDouble("interaction.autonomous.walk-speed", 1.0);
+        this.autonomousMaxElevationChange = cfg.getInt("interaction.autonomous.max-elevation-change", 20);
+        this.autonomousPreferPaths = cfg.getBoolean("interaction.autonomous.prefer-paths", true);
+        this.autonomousPathSearchRadius = cfg.getInt("interaction.autonomous.path-search-radius", 6);
+        this.autonomousStuckTimeoutMs =
+                cfg.getLong("interaction.autonomous.safety.stuck-timeout-seconds", 15) * 1000L;
+        this.autonomousStuckMinProgressDistance =
+                cfg.getDouble("interaction.autonomous.safety.stuck-min-progress-distance", 2.0);
         this.autonomousAvoidLava = cfg.getBoolean("interaction.autonomous.safety.avoid-lava", true);
         this.autonomousAvoidDeepWater = cfg.getBoolean("interaction.autonomous.safety.avoid-deep-water", true);
         this.autonomousAvoidCliffs = cfg.getBoolean("interaction.autonomous.safety.avoid-cliffs", true);
