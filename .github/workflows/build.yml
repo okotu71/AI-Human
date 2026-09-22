@@ -32,5 +32,5 @@ jobs:
       - name: Upload jar
         uses: actions/upload-artifact@v4
         with:
-          name: okotu-npc-ai-${{ steps.version.outputs.VERSION }}
+          name: ai-human-${{ steps.version.outputs.VERSION }}
           path: target/*.jar
