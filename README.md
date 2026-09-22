@@ -22,9 +22,37 @@ in that sandbox). Before going to production:
 
 The jar filename always embeds the Maven version (`<finalName>` in `pom.xml`
 uses `${project.artifactId}-${project.version}`), e.g.
-`ai-human-1.17.jar`. `plugin.yml`'s `version:` field is filled in
+`ai-human-1.18.jar`. `plugin.yml`'s `version:` field is filled in
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
+
+## What's new in 1.18
+
+### Bug fix: NPCs introducing themselves as "NPC-26" instead of their real name
+
+`/aihuman enable <npcId>` and `/aihuman profile <npcId> ...` (when creating
+a profile that didn't exist yet) both used a hardcoded `"NPC-" + npcId`
+placeholder as the character's name - completely ignoring the real name
+already configured on the Citizens NPC. That placeholder went straight into
+`profile.name()`, which the system prompt uses verbatim ("You are
+{name}.") - so the model was being told it's literally called "NPC-26",
+and said so, along with whatever profession got randomly assigned
+("carpenter", etc.).
+
+Fixed: both call sites now look up the actual Citizens NPC and use
+`npc.getName()` - the name it already shows on the map/tag/`/npc select` -
+falling back to "NPC-<id>" only in the edge case where that NPC genuinely
+can't be found (e.g. enabling an id that doesn't exist).
+
+**This only fixes it for NPCs enabled/profiled from now on.** An NPC
+already stuck with "NPC-26" as its stored name needs a one-time manual fix
+- the profile itself isn't touched automatically, since guessing at a
+"correct" name to rename it to isn't something the plugin can safely do on
+its own:
+
+```
+/aihuman profile 26 name <the name Citizens already shows for this NPC>
+```
 
 ## What's new in 1.17
 
@@ -193,7 +221,7 @@ that identifies the plugin changed; nothing about how it works did.
 - Permissions: `okotu.npcai.admin` / `okotu.npcai.talk` →
   `aihuman.admin` / `aihuman.talk`
 - Maven artifact: `okotu-npc-ai-engine` → `ai-human` (jar is now
-  `ai-human-1.17.jar`)
+  `ai-human-1.18.jar`)
 - Java package: `com.okotu.npcai` → `com.okotu.aihuman` (kept `okotu` -
   that's your author namespace, not part of the old plugin name)
 - Main class `OkotuNpcAiPlugin` → `AiHumanPlugin`, command handler
@@ -871,7 +899,7 @@ thread.
 ## Troubleshooting
 
 - **Plugin doesn't load / `plugin.yml` seems missing from the jar**: run
-  `unzip -l target/ai-human-1.17.jar | grep plugin.yml` after
+  `unzip -l target/ai-human-1.18.jar | grep plugin.yml` after
   building. A stale `target/` from a partial build can cause this - try
   `mvn clean package` from scratch.
 - **MySQL connection errors on startup**: check `active-profile` matches a

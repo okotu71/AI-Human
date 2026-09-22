@@ -115,7 +115,7 @@ public class AiHumanCommand implements CommandExecutor {
 
         NpcProfileDao dao = plugin.getNpcProfileDao();
         runAsync(sender, "Error updating profile field", () -> {
-            dao.findOrCreate(npcId, "NPC-" + npcId);
+            dao.findOrCreate(npcId, resolveNpcName(npcId));
             dao.updateField(npcId, field, value);
             sender.sendMessage(ChatColor.GREEN + "NPC " + npcId + ": " + field + " updated.");
         });
@@ -301,7 +301,7 @@ public class AiHumanCommand implements CommandExecutor {
         Integer npcId = parseInt(sender, args[1]);
         if (npcId == null) return;
 
-        String fallbackName = "NPC-" + npcId;
+        String fallbackName = resolveNpcName(npcId);
         runAsync(sender, "Error enabling AI for this NPC", () -> {
             plugin.getEnabledNpcRegistry().enable(npcId,
                     () -> plugin.getRandomProfileGenerator().generate(npcId, fallbackName));
@@ -685,6 +685,18 @@ public class AiHumanCommand implements CommandExecutor {
     // ---------------------------------------------------------------
     // helpers
     // ---------------------------------------------------------------
+    /**
+     * The NPC's real name as configured on Citizens, or "NPC-<id>" only if
+     * that NPC can't be found/isn't spawned right now (a profile still gets
+     * created either way - this is just what the LLM is told to call
+     * itself, so it should always be the name the admin actually gave the
+     * NPC in Citizens, never a synthetic id-based placeholder).
+     */
+    private String resolveNpcName(int npcId) {
+        NPC npc = CitizensAPI.getNPCRegistry().getById(npcId);
+        return npc != null ? npc.getName() : "NPC-" + npcId;
+    }
+
     private Integer parseInt(CommandSender sender, String s) {
         try {
             return Integer.parseInt(s);
