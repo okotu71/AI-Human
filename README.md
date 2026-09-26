@@ -26,6 +26,93 @@ uses `${project.artifactId}-${project.version}`), e.g.
 automatically at build time from the same value, so **the only place you
 need to bump the version for a new release is `pom.xml`**.
 
+## What's new in 1.19
+
+### Autonomous movement: "TRAVEL still doesn't move, WANDER only wanders locally then gets stuck"
+
+Two things went into this, and they're honestly at different confidence
+levels.
+
+**1. A real, mechanism-level bug fix (high confidence):** ground-finding for
+wander destinations used `World.getHighestBlockYAt(x, z)` with its default
+heightmap, which counts **leaves as ground**. In any forested or hilly area
+- which is most overworld terrain - a large share of candidate destinations
+were landing on top of tree canopies instead of the real ground below:
+
+- Rejected as a false "too big an elevation change from home" far more
+  often than they should have been, which is the leading explanation for
+  "WANDER only wanders in the immediate vicinity" - the safe candidates
+  that *did* pass the elevation check were disproportionately the nearby,
+  low-canopy/flat ones.
+- When accepted anyway, the NPC was sent to a point floating above a tree
+  canopy that Citizens' Navigator can never actually walk to - it reports
+  `isNavigating() == true` forever with no real progress, which is exactly
+  the "gets stuck" half of the report, and the 1.17 stuck-timeout would
+  eventually cancel and repick, often landing on another bad canopy point
+  nearby - looping in the same small area.
+
+Fixed in `NpcMovementController` and `NpcWorldSafety`: both now use
+`HeightMap.MOTION_BLOCKING_NO_LEAVES` instead of the default heightmap, so
+"ground" means the real terrain surface, not the top of the nearest tree.
+
+**2. Debug logging, not a guessed fix, for "TRAVEL doesn't move at all"**
+(unconfirmed root cause): nothing found by re-reading `NpcBehaviorManager`,
+`NpcWaypointRegistry`/`NpcWaypointDao`, and the command handlers explains a
+guaranteed "never moves" for TRAVEL - the dispatch, waypoint storage, and
+DB-refresh-after-write all look correct on inspection. Rather than guess a
+third time, this version adds:
+
+- `debug.log-movement: false` in `config.yml` - turn it on temporarily and
+  every autonomous NPC logs, once per `check-interval-ticks`, which behavior
+  branch ran, every rejected wander candidate and why (elevation/lava/water/
+  cliff/fire, now with the real reason instead of just "unsafe"), the
+  destination finally picked (or "none this cycle" and why), and for
+  TRAVEL specifically: how many waypoints are loaded for that NPC, which
+  waypoint index it's heading to, and that waypoint's world/coordinates.
+- **A warning that's always on regardless of the debug flag** (cheap to
+  check, too useful to gate behind a config toggle): every call into
+  Citizens' Navigator now compares the destination's world to the NPC's
+  actual current world first. Citizens cannot path an NPC across worlds -
+  `Navigator.setTarget` doesn't throw in that case, it just never makes
+  progress, which looks identical to "the NPC doesn't move at all". If a
+  TRAVEL waypoint (or a WANDER home location) was ever stored with a world
+  name that doesn't match where the NPC actually spawned - a typo from
+  adding a waypoint via console, or a world renamed/reloaded since - this
+  now logs it explicitly by name instead of silently doing nothing:
+
+  ```
+  [AI-Human MOVE] NPC 12: destination world_nether@(120,64,-40) is in a
+  different world than the NPC's current position world@(120,64,-40) -
+  Citizens cannot path across worlds, so this NPC will not move toward it.
+  ```
+
+  If your TRAVEL NPCs are still stuck after this update, checking the
+  server log for that exact warning is the fastest way to know whether
+  this is the cause. If it isn't, turn on `debug.log-movement` and the
+  per-cycle TRAVEL line above will show whether waypoints are even loaded
+  and which one it's targeting - send that log output back and it can be
+  chased further from real evidence instead of another guess.
+
+### Custom Pl3xMap marker icon from your own artwork
+
+`npc-map.custom-icon.enabled: true` (new, on by default): AI NPCs on the
+Pl3xMap web map now use a bundled brand icon (`icons/npc-marker-icon.png`
+in the jar, built from the "brain in a jar" artwork) instead of the
+generated colored person-silhouette, when icon markers are available on
+your Pl3xMap install (same `icon-mode`/reflection detection as 1.15 - falls
+back automatically to the generated silhouette, and further to the plain
+square, exactly as before if anything about icon markers isn't available).
+Set `custom-icon.enabled: false` to go back to the generated silhouette
+without touching anything else.
+
+**About "the Java application icon":** a Paper plugin has no window/taskbar
+icon of its own to change - it's server-side code, not a desktop app - so
+the Pl3xMap marker seemed like the one place in this project an "icon" is
+actually a real, visible thing tied to the AI NPCs. If what was actually
+wanted is different - the Minecraft server's own multiplayer-list icon
+(`server-icon.png`), the Pterodactyl egg's icon, or something else entirely
+- say which one and it's a small follow-up from here.
+
 ## What's new in 1.18
 
 ### Bug fix: NPCs introducing themselves as "NPC-26" instead of their real name

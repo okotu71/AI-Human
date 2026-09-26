@@ -1,9 +1,14 @@
 package com.okotu.aihuman.map;
 
+import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Generates a small "person" icon (a round head over a rounded body, like a
@@ -17,10 +22,51 @@ import java.awt.image.BufferedImage;
  * the texture, cropping the head, keeping it in sync if the NPC's skin
  * changes - and hasn't been attempted here; ask if you want that as a
  * follow-up.
+ *
+ * <p>1.19+: also loads a fixed, bundled brand icon
+ * ({@code icons/npc-marker-icon.png} in the jar) via {@link #customIcon},
+ * used instead of the generated silhouette when
+ * {@code npc-map.custom-icon.enabled} is true - see {@code NpcMapSync}.
  */
 public final class NpcIconFactory {
 
+    private static BufferedImage cachedCustomIcon;
+    private static boolean customIconLoadAttempted = false;
+
     private NpcIconFactory() {
+    }
+
+    /**
+     * Loads {@code icons/npc-marker-icon.png} from the plugin jar once and
+     * caches the result (including a cached "not found/unreadable" outcome,
+     * so a broken resource doesn't retry a classpath lookup every map
+     * refresh cycle). Returns null if the resource is missing or isn't a
+     * valid image - callers should fall back to {@link #personIcon} in that
+     * case exactly like any other "Pl3xMap feature unavailable" fallback in
+     * this integration.
+     */
+    public static synchronized BufferedImage customIcon(Logger logger) {
+        if (customIconLoadAttempted) {
+            return cachedCustomIcon;
+        }
+        customIconLoadAttempted = true;
+        try (InputStream in = NpcIconFactory.class.getClassLoader().getResourceAsStream("icons/npc-marker-icon.png")) {
+            if (in == null) {
+                logger.warning("[AI-Human] npc-map.custom-icon.enabled is true but icons/npc-marker-icon.png "
+                        + "wasn't found in the jar - falling back to the generated person icon.");
+                return null;
+            }
+            cachedCustomIcon = ImageIO.read(in);
+            if (cachedCustomIcon == null) {
+                logger.warning("[AI-Human] icons/npc-marker-icon.png couldn't be decoded as an image - "
+                        + "falling back to the generated person icon.");
+            }
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "[AI-Human] Failed to load icons/npc-marker-icon.png - "
+                    + "falling back to the generated person icon.", e);
+            cachedCustomIcon = null;
+        }
+        return cachedCustomIcon;
     }
 
     public static BufferedImage personIcon(Color color, int size) {

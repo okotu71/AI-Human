@@ -114,6 +114,15 @@ public class NpcMapSync implements Runnable {
     }
 
     private BufferedImage iconFor(boolean autonomous) {
+        if (plugin.getPluginConfig().npcMapCustomIcon) {
+            BufferedImage custom = NpcIconFactory.customIcon(plugin.getLogger());
+            if (custom != null) {
+                return custom;
+            }
+            // Load failed (missing/corrupt resource, already logged once) - fall
+            // through to the generated silhouette below exactly like icon-mode
+            // itself falls back to the plain square when unavailable.
+        }
         return iconByVariant.computeIfAbsent(autonomous,
                 key -> NpcIconFactory.personIcon(style.iconColor(key), ICON_SIZE));
     }

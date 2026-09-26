@@ -46,10 +46,21 @@ public class NpcBehaviorManager implements Runnable {
 
     private final AiHumanPlugin plugin;
     private final Map<Integer, NpcController> controllers = new ConcurrentHashMap<>();
-    private final NpcMovementController movementController = new NpcMovementController();
+    private final NpcMovementController movementController;
 
     public NpcBehaviorManager(AiHumanPlugin plugin) {
         this.plugin = plugin;
+        this.movementController = new NpcMovementController(plugin);
+    }
+
+    private boolean debugMovement() {
+        return plugin.getPluginConfig().debugLogMovement;
+    }
+
+    private void debug(String message) {
+        if (debugMovement()) {
+            plugin.getLogger().log(Level.INFO, "[AI-Human MOVE] " + message);
+        }
     }
 
     @Override
@@ -73,6 +84,12 @@ public class NpcBehaviorManager implements Runnable {
 
             NpcController controller = controllers.computeIfAbsent(npc.getId(), NpcController::new);
             NpcBehaviorSettings settings = NpcBehaviorSettings.resolve(config, behaviorConfig.get());
+
+            if (debugMovement()) {
+                debug("tick: NPC " + npc.getId() + " (" + npc.getName() + ") state=" + controller.state()
+                        + " behaviorType=" + behaviorConfig.get().behaviorType()
+                        + " navigating=" + (npc.isSpawned() && npc.getNavigator().isNavigating()));
+            }
 
             try {
                 switch (controller.state()) {
@@ -111,24 +128,42 @@ public class NpcBehaviorManager implements Runnable {
 
         if (npc.getNavigator().isNavigating()) {
             if (hasMadeProgress(controller, npcLocation, settings)) {
+                if (debugMovement()) {
+                    debug("NPC " + npc.getId() + ": still navigating, made progress (now at "
+                            + npcLocation.getBlockX() + "," + npcLocation.getBlockY() + "," + npcLocation.getBlockZ()
+                            + ") - resetting stuck timer");
+                }
                 controller.setLastProgressPosition(npcLocation);
                 controller.setLastProgressAtMillis(System.currentTimeMillis());
                 return; // actively making progress toward its current destination - nothing to do
             }
-            if (System.currentTimeMillis() - controller.lastProgressAtMillis() < settings.stuckTimeoutMs()) {
+            long stuckForMs = System.currentTimeMillis() - controller.lastProgressAtMillis();
+            if (stuckForMs < settings.stuckTimeoutMs()) {
+                if (debugMovement()) {
+                    debug("NPC " + npc.getId() + ": navigating, no progress for " + stuckForMs
+                            + "ms (timeout " + settings.stuckTimeoutMs() + "ms) - waiting");
+                }
                 return; // navigating, no progress yet, but not stuck long enough to give up on it
             }
             // Stuck: Citizens' own Navigator still reports "navigating" but the NPC
             // hasn't actually moved in stuckTimeoutMs - give up on this path and
             // fall through below to immediately pick a fresh destination.
+            if (debugMovement()) {
+                debug("NPC " + npc.getId() + ": stuck for " + stuckForMs + "ms >= timeout "
+                        + settings.stuckTimeoutMs() + "ms - cancelling navigation and picking a new destination");
+            }
             npc.getNavigator().cancelNavigation();
         }
 
-        pickNextDestination(npc, behaviorConfig, controller, settings, npcLocation).ifPresent(destination -> {
-            movementController.navigateTo(npc, destination, settings.walkSpeed());
+        Optional<Location> next = pickNextDestination(npc, behaviorConfig, controller, settings, npcLocation);
+        if (next.isPresent()) {
+            movementController.navigateTo(npc, next.get(), settings.walkSpeed());
             controller.setLastProgressPosition(npcLocation);
             controller.setLastProgressAtMillis(System.currentTimeMillis());
-        });
+        } else if (debugMovement()) {
+            debug("NPC " + npc.getId() + ": no destination available this cycle ("
+                    + behaviorConfig.behaviorType() + ") - staying put until next check-interval-ticks");
+        }
         // If no destination was available this cycle (WANDER found nothing safe, or
         // TRAVEL has no waypoints configured yet), the NPC just stays put and this
         // is retried next check-interval-ticks.
@@ -148,16 +183,32 @@ public class NpcBehaviorManager implements Runnable {
     private Optional<Location> nextWaypoint(NPC npc, NpcController controller) {
         List<NpcWaypoint> waypoints = plugin.getNpcWaypointRegistry().get(npc.getId());
         if (waypoints.isEmpty()) {
+            if (debugMovement()) {
+                debug("NPC " + npc.getId() + ": TRAVEL behavior but 0 waypoints loaded in NpcWaypointRegistry - "
+                        + "run /aihuman travel " + npc.getId() + " add, or /aihuman travel " + npc.getId()
+                        + " list to check what's actually stored");
+            }
             return Optional.empty(); // TRAVEL selected but no waypoints yet - see /aihuman travel add
         }
         int index = controller.waypointIndex() % waypoints.size();
         NpcWaypoint waypoint = waypoints.get(index);
         World world = Bukkit.getWorld(waypoint.world());
         if (world == null) {
+            if (debugMovement()) {
+                debug("NPC " + npc.getId() + ": TRAVEL waypoint #" + waypoint.sequence() + " points to world '"
+                        + waypoint.world() + "' which Bukkit.getWorld() can't find right now (not loaded, or "
+                        + "the name doesn't match any world) - skipping this cycle");
+            }
             return Optional.empty(); // that waypoint's world isn't loaded right now
         }
         controller.setWaypointIndex((index + 1) % waypoints.size());
-        return Optional.of(new Location(world, waypoint.x(), waypoint.y(), waypoint.z()));
+        Location destination = new Location(world, waypoint.x(), waypoint.y(), waypoint.z());
+        if (debugMovement()) {
+            debug("NPC " + npc.getId() + ": TRAVEL heading to waypoint #" + waypoint.sequence() + "/"
+                    + waypoints.size() + " at " + world.getName() + "@(" + waypoint.x() + "," + waypoint.y() + ","
+                    + waypoint.z() + ")");
+        }
+        return Optional.of(destination);
     }
 
     /**

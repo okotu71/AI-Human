@@ -119,6 +119,7 @@ public class PluginConfig {
     public final long npcMapRefreshIntervalTicks;
     public final double npcMapMarkerSize;
     public final boolean npcMapIconMode;
+    public final boolean npcMapCustomIcon;
 
     // --- rate limit ---
     public final long perPlayerCooldownMs;
@@ -136,6 +137,7 @@ public class PluginConfig {
 
     // --- debug ---
     public final boolean debugLogOllamaCommunication;
+    public final boolean debugLogMovement;
 
     public PluginConfig(Plugin plugin) {
         FileConfiguration cfg = plugin.getConfig();
@@ -253,6 +255,7 @@ public class PluginConfig {
         this.npcMapRefreshIntervalTicks = cfg.getLong("npc-map.refresh-interval-seconds", 10) * 20L;
         this.npcMapMarkerSize = cfg.getDouble("npc-map.marker-size", 1.0);
         this.npcMapIconMode = cfg.getBoolean("npc-map.icon-mode", true);
+        this.npcMapCustomIcon = cfg.getBoolean("npc-map.custom-icon.enabled", true);
 
         this.perPlayerCooldownMs = cfg.getLong("rate-limit.per-player-cooldown-ms", 3000);
 
@@ -266,6 +269,7 @@ public class PluginConfig {
         this.npcDefaultSpeechStyles = cfg.getStringList("npc-defaults.speech-styles");
 
         this.debugLogOllamaCommunication = cfg.getBoolean("debug.log-ollama-communication", false);
+        this.debugLogMovement = cfg.getBoolean("debug.log-movement", false);
     }
 
     private static String getFromProfile(ConfigurationSection section, String key, String fallback) {

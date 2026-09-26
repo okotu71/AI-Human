@@ -6,7 +6,7 @@
 
     <groupId>com.okotu</groupId>
     <artifactId>ai-human</artifactId>
-    <version>1.18</version>
+    <version>1.19</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -123,6 +123,20 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>true</filtering>
+                <!-- 1.19+: binary assets (map marker icon) must never go through
+                     Maven's text-based resource filtering - it corrupts non-text
+                     bytes. Excluded here and re-added below as a second,
+                     unfiltered resource entry. -->
+                <excludes>
+                    <exclude>**/*.png</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <includes>
+                    <include>**/*.png</include>
+                </includes>
             </resource>
         </resources>
         <plugins>

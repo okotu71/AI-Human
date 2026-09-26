@@ -372,6 +372,16 @@ npc-map:
   # 1.15"). Falls back to the square automatically if icon markers aren't
   # available, so this is safe to leave on either way.
   icon-mode: true
+  # 1.19+: if true (and icon-mode above is also true), every AI NPC's map
+  # marker uses the bundled "AI-Human" brand icon (icons/npc-marker-icon.png
+  # in the jar) instead of the generated colored person-silhouette from
+  # NpcIconFactory - same icon for autonomous and stationary NPCs (no
+  # per-variant tinting, since it's a fixed image). Falls back to the
+  # generated silhouette automatically if the bundled image can't be loaded
+  # for any reason, exactly like icon-mode itself falls back to the plain
+  # square - this is never a way to break an existing working map.
+  custom-icon:
+    enabled: true
   stationary:
     border:
       enabled: true
@@ -414,3 +424,15 @@ debug:
   # NPC "sees" and says, but very noisy and may log conversation content to
   # the console/log files - leave off in normal production use.
   log-ollama-communication: false
+  # 1.19+: logs, at INFO level prefixed "[AI-Human MOVE]", every autonomous-
+  # movement decision for every autonomous NPC each check-interval-ticks:
+  # which behavior branch ran (WANDER/TRAVEL), each rejected wander
+  # candidate and why (elevation/lava/water/cliff/fire), the destination
+  # finally chosen (or "none found this cycle"), the NPC's and destination's
+  # world+coordinates, Navigator.isNavigating()/stuck-timer state, and
+  # TRAVEL's waypoint lookup (how many waypoints are loaded, which index is
+  # being sent to, its world). Turn this on temporarily to see exactly why a
+  # specific NPC isn't moving or is getting stuck, then back off - it logs
+  # once per autonomous NPC per check-interval-ticks, so it can be noisy
+  # with several autonomous NPCs and a short interval.
+  log-movement: false

@@ -1,5 +1,6 @@
 package com.okotu.aihuman.npc;
 
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -29,42 +30,58 @@ public final class NpcWorldSafety {
     }
 
     public static boolean isSafe(Location candidate, NpcBehaviorSettings settings) {
+        return rejectionReason(candidate, settings) == null;
+    }
+
+    /**
+     * Same check as {@link #isSafe}, but returns a short human-readable reason
+     * ("no-world", "cliff", "lava", "fire", "cactus", "deep-water") instead of
+     * a bare boolean, or {@code null} if the candidate is safe. Used only by
+     * the {@code debug.log-movement} path in {@code NpcMovementController} so
+     * a rejected wander candidate can be explained in the server log instead
+     * of just silently retried.
+     */
+    public static String rejectionReason(Location candidate, NpcBehaviorSettings settings) {
         World world = candidate.getWorld();
         if (world == null) {
-            return false;
+            return "no-world";
         }
 
-        Block ground = world.getHighestBlockAt(candidate);
+        // Same MOTION_BLOCKING_NO_LEAVES reasoning as NpcMovementController#pickDestination:
+        // the default heightmap counts leaves as ground, which misjudges "ground" as the
+        // top of a tree canopy almost anywhere there's forest cover.
+        Block ground = world.getHighestBlockAt(candidate.getBlockX(), candidate.getBlockZ(),
+                HeightMap.MOTION_BLOCKING_NO_LEAVES);
         if (ground == null) {
-            return false;
+            return "no-ground";
         }
 
         if (settings.avoidCliffs()) {
             int fall = candidate.getBlockY() - ground.getY() - 1;
             if (fall > settings.maxSafeFallBlocks()) {
-                return false;
+                return "cliff(fall=" + fall + ")";
             }
         }
 
         if (settings.avoidLava() && (isType(ground, Material.LAVA) || nearAny(candidate, 1, Material.LAVA))) {
-            return false;
+            return "lava";
         }
 
         if (settings.avoidFire() && nearAny(candidate, 1, Material.FIRE, Material.SOUL_FIRE)) {
-            return false;
+            return "fire";
         }
 
         // Not configurable on its own (always avoided): standing an NPC on/next to a
         // cactus looks broken and can damage it for no in-character reason.
         if (nearAny(candidate, 1, Material.CACTUS)) {
-            return false;
+            return "cactus";
         }
 
         if (settings.avoidDeepWater() && isDeepWater(world, ground, settings.maxWaterDepth())) {
-            return false;
+            return "deep-water";
         }
 
-        return true;
+        return null;
     }
 
     private static boolean isType(Block block, Material material) {
